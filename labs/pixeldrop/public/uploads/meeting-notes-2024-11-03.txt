@@ -1,0 +1,22 @@
+Weekly design sync - 2024-11-03
+===============================
+
+Present: studio lead, two designers, one backend contractor.
+Synthetic notes for the local PixelDrop demo instance.
+
+1. Share links
+   Partner bookmarks point at the old `/download?file=...` endpoint. Keep it
+   working until the media gateway migration is signed off. The gateway still
+   re-escapes names, so links are double escaped in old exports.
+
+2. Private drops
+   Access rules are still "any signed-in teammate can open a drop by id" in
+   the prototype. Safety review flagged this for a follow-up ticket.
+
+3. Upload form
+   Scope for now: metadata only (name, visibility, description, max 512
+   characters). Reject anything else with a clear 4xx.
+
+4. Demo
+   Demo credentials are printed on the sign-in page so reviewers can get in
+   without asking for an account.

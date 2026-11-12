@@ -1,0 +1,39 @@
+{
+    "model":  "orca/orcacyber-flash-1.0",
+    "currency":  "USD",
+    "ratesPerMillion":  {
+                            "input":  0.8,
+                            "output":  1.6,
+                            "cacheRead":  0.15
+                        },
+    "measured":  {
+                     "note":  "Measured against the real scan prompt, not a trivial task. Scan steps are pricier because the prompt and tool outputs are larger and the transcript is re-read as cache.",
+                     "calibrationRunSteps":  9,
+                     "calibrationRunUsd":  0.102,
+                     "usdPerStep":  0.0113,
+                     "trivialTaskUsdPerStep":  0.0055,
+                     "measuredAt":  "2026-11-03"
+                 },
+    "presets":  [
+                    {
+                        "label":  "RECON SWARM",
+                        "usd":  1,
+                        "steps":  88
+                    },
+                    {
+                        "label":  "PENTEST SWARM",
+                        "usd":  5,
+                        "steps":  442
+                    },
+                    {
+                        "label":  "SWARM MAX",
+                        "usd":  12,
+                        "steps":  1060
+                    },
+                    {
+                        "label":  "SINGLE CHEAP",
+                        "usd":  0.5,
+                        "steps":  44
+                    }
+                ]
+}

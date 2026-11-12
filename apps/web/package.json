@@ -1,0 +1,41 @@
+{
+  "name": "hmw-web",
+  "private": true,
+  "version": "0.1.0",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "db:generate": "prisma generate",
+    "db:migrate": "prisma migrate dev",
+    "db:push": "prisma db push",
+    "db:studio": "prisma studio",
+    "db:seed": "node --env-file=.env.local scripts/seed.mjs",
+    "db:deploy": "prisma migrate deploy",
+    "worker:smoke": "node --env-file=.env.local scripts/worker-smoke.mjs",
+    "test:rate": "node --experimental-strip-types scripts/rate-limit-test.mjs"
+  },
+  "dependencies": {
+    "@auth/prisma-adapter": "2.11.3",
+    "@prisma/adapter-mariadb": "^7.10.1",
+    "@prisma/client": "7.5.0",
+    "jszip": "^3.10.2",
+    "mariadb": "^3.5.5",
+    "next": "16.2.0",
+    "next-auth": "5.0.0-beta.32",
+    "react": "19.3.1",
+    "react-dom": "19.3.1",
+    "resend": "6.37.0",
+    "stripe": "23.1.0",
+    "zod": "4.6.7"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "4.3.4",
+    "@types/node": "24.19.2",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "prisma": "7.5.0",
+    "tailwindcss": "4.3.4",
+    "typescript": "5.9.3"
+  }
+}

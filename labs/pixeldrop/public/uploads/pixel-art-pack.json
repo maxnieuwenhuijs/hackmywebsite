@@ -1,0 +1,13 @@
+{
+  "pack": "pixel-art-pack",
+  "version": 3,
+  "author": "pixelforge-studio",
+  "license": "synthetic-demo-asset",
+  "tiles": [
+    { "id": "tile-grass", "size": 16, "palette": ["#5BD75B", "#3FA34D", "#27632A"] },
+    { "id": "tile-stone", "size": 16, "palette": ["#B8B8C0", "#8A8A94", "#5C5C66"] },
+    { "id": "tile-water", "size": 16, "palette": ["#4FA8E0", "#2F7FBF", "#1D4F7A"] },
+    { "id": "tile-sand", "size": 16, "palette": ["#E8D8A8", "#C9B37E", "#9C8656"] }
+  ],
+  "notes": "Demo palette only. Not affiliated with any real product."
+}

@@ -1,0 +1,596 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+}
+
+enum Role {
+  USER
+  ADMIN
+}
+
+enum DomainStatus {
+  PENDING
+  VERIFIED
+  EXPIRED
+  REVOKED
+}
+
+enum RunStatus {
+  PENDING_VERIFICATION
+  QUEUED
+  RUNNING
+  REPORTING
+  COMPLETE
+  PARTIAL
+  INCONCLUSIVE
+  FAILED
+  CANCELLED
+  REFUNDED
+}
+
+enum RunMode {
+  RECON
+  PENTEST
+}
+
+enum RunEngine {
+  SWARM
+  SINGLE
+}
+
+enum AgentStatus {
+  RUNNING
+  COMPLETED
+  FAILED
+  NO_REPORT
+  SALVAGED
+}
+
+enum LedgerKind {
+  TOPUP
+  HOLD
+  CHARGE
+  RELEASE
+  CLEAN_CREDIT
+  REFUND
+  EXPIRY
+  ADJUSTMENT
+}
+
+enum PaymentStatus {
+  PENDING
+  PAID
+  FAILED
+  REFUNDED
+}
+
+enum WorkerStatus {
+  ONLINE
+  OFFLINE
+  DISABLED
+}
+
+enum AssessmentTier {
+  RECON
+  PENTEST
+  DEEP
+}
+
+enum BriefingStatus {
+  PENDING
+  SENT
+  FAILED
+}
+
+enum EgressStatus {
+  ACTIVE
+  QUARANTINED
+  RESERVED
+  OFFLINE
+}
+
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String?   @unique
+  emailVerified DateTime?
+  image         String?
+  role          Role      @default(USER)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  accounts     Account[]
+  sessions     Session[]
+  domains      Domain[]
+  wallet       Wallet?
+  creditLots   CreditLot[]
+  ledger       LedgerEntry[]
+  payments     Payment[]
+  refunds      Refund[]
+  userKeys     UserKey[]
+  runs         Run[]
+  deliveryCodes DeliveryCode[]
+  auditLogs    AuditLog[]
+  abuseFlags   AbuseFlag[]
+  notifications Notification[]
+  emailOutbox  EmailOutbox[]
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@index([userId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+model Domain {
+  id         String       @id @default(cuid())
+  userId     String
+  hostname   String
+  status     DomainStatus @default(PENDING)
+  method     String?
+  verifiedMethod String?
+  verificationVersion Int @default(1)
+  evidence   Json?
+  verifiedAt DateTime?
+  expiresAt  DateTime?
+  createdAt  DateTime     @default(now())
+  updatedAt  DateTime     @updatedAt
+
+  user           User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  verifications  DomainVerification[]
+  runs           Run[]
+
+  @@unique([userId, hostname])
+  @@index([hostname])
+}
+
+model DomainVerification {
+  id        String    @id @default(cuid())
+  domainId  String
+  tokenHash String
+  method    String
+  expiresAt DateTime
+  usedAt    DateTime?
+  attempts  Int       @default(0)
+  lastError String?   @db.Text
+  verifiedAt DateTime?
+  evidence  Json?
+  ip        String?
+  userAgent String?
+  createdAt DateTime  @default(now())
+
+  domain Domain @relation(fields: [domainId], references: [id], onDelete: Cascade)
+
+  @@index([domainId, expiresAt])
+}
+
+model Wallet {
+  id           String   @id @default(cuid())
+  userId       String   @unique
+  currency     String   @default("USD")
+  balanceCents Int      @default(0)
+  heldCents    Int      @default(0)
+  updatedAt    DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model CreditLot {
+  id             String    @id @default(cuid())
+  userId         String
+  cents          Int
+  remainingCents Int
+  source         String
+  expiresAt      DateTime
+  createdAt      DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, expiresAt])
+}
+
+model LedgerEntry {
+  id                String     @id @default(cuid())
+  userId            String
+  runId             String?
+  kind              LedgerKind
+  amountCents       Int
+  balanceAfterCents Int
+  meta              Json?
+  createdAt         DateTime   @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  run  Run?  @relation(fields: [runId], references: [id], onDelete: SetNull)
+
+  @@index([userId, createdAt])
+  @@index([runId])
+}
+
+model Payment {
+  id         String        @id @default(cuid())
+  userId     String
+  provider   String
+  providerId String        @unique
+  amountCents Int
+  status     PaymentStatus @default(PENDING)
+  invoiceUrl String?
+  raw        Json?
+  createdAt  DateTime      @default(now())
+
+  user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  refunds Refund[]
+
+  @@index([userId, createdAt])
+}
+
+model Refund {
+  id         String   @id @default(cuid())
+  userId     String
+  paymentId  String?
+  runId      String?
+  amountCents Int
+  reason     String
+  status     String
+  createdAt  DateTime @default(now())
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  payment Payment? @relation(fields: [paymentId], references: [id], onDelete: SetNull)
+  run     Run?     @relation(fields: [runId], references: [id], onDelete: SetNull)
+
+  @@index([userId, createdAt])
+}
+
+model UserKey {
+  id                  String    @id @default(cuid())
+  userId              String
+  keyId               String    @unique
+  publicKeySpki       String    @db.Text
+  encryptedPrivateKey String?   @db.Text
+  kdfSalt             String?
+  kdfIters            Int?
+  createdAt           DateTime  @default(now())
+  revokedAt           DateTime?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model Worker {
+  id           String       @id @default(cuid())
+  name         String       @unique
+  tokenHash    String
+  status       WorkerStatus @default(OFFLINE)
+  version      String?
+  capabilities Json?
+  egressPeer   String?
+  egressIp     String?
+  egressRange  String?
+  egressLastSeenAt DateTime?
+  lastSeenAt   DateTime?
+  createdAt    DateTime     @default(now())
+
+  runs Run[]
+  egressAssignments EgressAssignment[]
+}
+
+model Run {
+  id                  String     @id @default(cuid())
+  userId              String
+  domainId            String
+  url                 String     @db.Text
+  host                String
+  mode                RunMode    @default(RECON)
+  engine              RunEngine  @default(SWARM)
+  tier                AssessmentTier @default(RECON)
+  status              RunStatus  @default(QUEUED)
+  customerBudgetCents Int
+  internalCapCents    Int
+  internalCostCents   Int        @default(0)
+  chargedCents        Int        @default(0)
+  briefingPlan        Json?
+  briefingsSent       Int        @default(0)
+  egressIp            String?
+  egressRange         String?
+  egressAssignedAt    DateTime?
+  cleanCert           Boolean?
+  language            String     @default("en")
+  queuedAt            DateTime   @default(now())
+  startedAt           DateTime?
+  finishedAt          DateTime?
+  workerId            String?
+  leaseExpiresAt      DateTime?
+  heartbeatAt         DateTime?
+  cancelRequested     Boolean    @default(false)
+  error               String?    @db.Text
+  coverage            Json?
+  findings            Json?
+  createdAt           DateTime   @default(now())
+  updatedAt           DateTime   @updatedAt
+
+  user           User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  domain         Domain         @relation(fields: [domainId], references: [id], onDelete: Restrict)
+  worker         Worker?        @relation(fields: [workerId], references: [id], onDelete: SetNull)
+  agents         RunAgent[]
+  events         RunEvent[]
+  briefings      RunBriefing[]
+  egressAssignments EgressAssignment[]
+  bundle         ReportBundle?
+  ledger         LedgerEntry[]
+  refunds        Refund[]
+  abuseFlags     AbuseFlag[]
+
+  @@index([status, queuedAt])
+  @@index([userId, createdAt])
+  @@index([workerId])
+}
+
+model RunAgent {
+  id               String      @id @default(cuid())
+  runId            String
+  agentId          String
+  role             String
+  round            Int
+  retry            Int         @default(0)
+  status           AgentStatus @default(RUNNING)
+  steps            Int         @default(0)
+  internalCostCents Int        @default(0)
+  findingsCount    Int         @default(0)
+  survived         Boolean?
+  error            String?     @db.Text
+  startedAt        DateTime?
+  endedAt          DateTime?
+
+  run Run @relation(fields: [runId], references: [id], onDelete: Cascade)
+
+  @@unique([runId, agentId])
+  @@index([runId])
+}
+
+model RunEvent {
+  id        String   @id @default(cuid())
+  runId     String
+  seq       Int
+  type      String
+  payload   Json
+  createdAt DateTime @default(now())
+
+  run Run @relation(fields: [runId], references: [id], onDelete: Cascade)
+
+  @@unique([runId, seq])
+  @@index([runId, createdAt])
+}
+
+model ReportBundle {
+  id                 String    @id @default(cuid())
+  runId              String    @unique
+  keyId              String
+  storageKey         String
+  envelope           Json
+  sha256             String
+  bytes              Int
+  createdAt          DateTime  @default(now())
+  plaintextDeletedAt DateTime?
+
+  run           Run            @relation(fields: [runId], references: [id], onDelete: Cascade)
+  deliveryCodes DeliveryCode[]
+
+  @@index([keyId])
+}
+
+model DeliveryCode {
+  id           String    @id @default(cuid())
+  bundleId     String
+  userId       String
+  codeHmac     String
+  tokenHash    String    @unique
+  expiresAt    DateTime
+  maxDownloads Int       @default(5)
+  downloads    Int       @default(0)
+  attempts     Int       @default(0)
+  lockedAt     DateTime?
+  createdAt    DateTime  @default(now())
+  lastUsedAt   DateTime?
+  ip           String?
+  userAgent    String?
+
+  bundle  ReportBundle   @relation(fields: [bundleId], references: [id], onDelete: Cascade)
+  user    User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  events  DeliveryEvent[]
+
+  @@index([bundleId])
+  @@index([expiresAt])
+}
+
+model DeliveryEvent {
+  id         String   @id @default(cuid())
+  deliveryId String
+  kind       String
+  ip         String?
+  userAgent  String?
+  createdAt  DateTime @default(now())
+
+  delivery DeliveryCode @relation(fields: [deliveryId], references: [id], onDelete: Cascade)
+
+  @@index([deliveryId, createdAt])
+}
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  userId     String?
+  actor      String
+  action     String
+  target     String?
+  meta       Json?
+  ip         String?
+  userAgent  String?
+  createdAt  DateTime @default(now())
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([createdAt])
+  @@index([actor, action])
+}
+
+model AbuseFlag {
+  id        String   @id @default(cuid())
+  runId     String?
+  userId    String?
+  reason    String
+  status    String   @default("open")
+  createdAt DateTime @default(now())
+
+  run  Run?  @relation(fields: [runId], references: [id], onDelete: SetNull)
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([status, createdAt])
+}
+
+model RunBriefing {
+  id           String         @id @default(cuid())
+  runId        String
+  seq          Int
+  thresholdPct Int
+  status       BriefingStatus @default(PENDING)
+  title        String
+  summary      String?        @db.Text
+  findings     Json?
+  coverage     Json?
+  agentStats   Json?
+  createdAt    DateTime       @default(now())
+  deliveredAt  DateTime?
+
+  run Run @relation(fields: [runId], references: [id], onDelete: Cascade)
+
+  @@unique([runId, seq])
+  @@index([runId, createdAt])
+}
+
+model Notification {
+  id        String    @id @default(cuid())
+  userId    String
+  kind      String
+  title     String
+  body      String?   @db.Text
+  href      String?
+  readAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([userId, readAt])
+}
+
+model EmailOutbox {
+  id          String    @id @default(cuid())
+  userId      String?
+  kind        String
+  toAddress   String
+  subject     String
+  html        String    @db.Text
+  text        String    @db.Text
+  status      String    @default("pending")
+  attempts    Int       @default(0)
+  providerId  String?
+  error       String?   @db.Text
+  createdAt   DateTime  @default(now())
+  sentAt      DateTime?
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([status, createdAt])
+  @@index([userId, createdAt])
+}
+
+model EgressPool {
+  id             String       @id @default(cuid())
+  cidr           String       @unique
+  region         String
+  provider       String
+  status         EgressStatus @default(ACTIVE)
+  ptr            String?
+  lastAssignedAt DateTime?
+  notes          String?      @db.Text
+  createdAt      DateTime     @default(now())
+
+  assignments EgressAssignment[]
+  metrics     EgressMetric[]
+}
+
+model EgressAssignment {
+  id         String       @id @default(cuid())
+  poolId     String
+  workerId   String?
+  runId      String
+  ip         String
+  status     EgressStatus @default(RESERVED)
+  assignedAt DateTime     @default(now())
+  releasedAt DateTime?
+
+  pool   EgressPool @relation(fields: [poolId], references: [id], onDelete: Cascade)
+  worker Worker?    @relation(fields: [workerId], references: [id], onDelete: SetNull)
+  run    Run        @relation(fields: [runId], references: [id], onDelete: Cascade)
+
+  @@index([runId, releasedAt])
+  @@index([workerId, status])
+  @@index([ip, status])
+}
+
+model EgressMetric {
+  id            String   @id @default(cuid())
+  poolId        String
+  ip            String
+  bucketStart   DateTime
+  requests      Int      @default(0)
+  bytesIn       BigInt   @default(0)
+  bytesOut      BigInt   @default(0)
+  errors        Int      @default(0)
+  blocklistHits Int      @default(0)
+
+  pool EgressPool @relation(fields: [poolId], references: [id], onDelete: Cascade)
+
+  @@unique([ip, bucketStart])
+  @@index([poolId, bucketStart])
+}
+
+model Setting {
+  key   String @id
+  value Json
+}

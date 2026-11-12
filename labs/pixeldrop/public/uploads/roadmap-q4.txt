@@ -1,0 +1,16 @@
+PixelDrop Q4 roadmap (draft)
+============================
+
+Week 40  Share-link rewrite finished. Old links still 302 through the
+         media gateway, which keeps the double-escaped path format.
+Week 41  Public drop list gets uploader + date columns.
+Week 42  Private drops: per-file ACL review (safety team owns the spec).
+Week 43  Upload metadata form: name, visibility, description only.
+         No binary upload until the quarantine scanner lands.
+Week 44  Freeze for the holiday demo.
+
+Known follow-ups
+----------------
+- [ ] rename "drops" to "files" everywhere
+- [ ] retire the legacy path decoder after partner links expire
+- [ ] write the reset runbook for the staging instance

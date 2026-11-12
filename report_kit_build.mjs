@@ -1,0 +1,861 @@
+// report_kit_build.mjs - assemble a kit-faithful rapport.src.html from content.json.
+// Structure, classes and data-attributes come straight from report-kit/voorbeeld.html.
+// Usage: node report_kit_build.mjs <scan-dir>
+import fs from 'node:fs';
+import path from 'node:path';
+import { translateHtml, langByCode } from './i18n.mjs';
+
+const HERE = import.meta.dirname;
+const dir = process.argv[2];
+if (!dir) { console.error('usage: node report_kit_build.mjs <scan-dir>'); process.exit(2); }
+
+const scan = JSON.parse(fs.readFileSync(path.join(dir, 'scan.json'), 'utf8'));
+const data = JSON.parse(fs.readFileSync(path.join(dir, 'findings.json'), 'utf8'));
+const evidencePath = path.join(dir, 'evidence.json');
+const evidenceData = fs.existsSync(evidencePath) ? JSON.parse(fs.readFileSync(evidencePath, 'utf8')) : null;
+const evidenceByIndex = new Map((evidenceData?.findings || []).map((e) => [Number(e.index), e]));
+const advicePath = path.join(dir, 'advice.json');
+const advice = fs.existsSync(advicePath) ? JSON.parse(fs.readFileSync(advicePath, 'utf8')) : null;
+const LANG = (() => { const i = process.argv.indexOf('--lang'); return i > 0 ? process.argv[i + 1] : 'nl'; })();
+// per-language content so generating one language never overwrites another
+const contentPath = path.join(dir, `content.${LANG}.json`);
+const legacyPath = path.join(dir, 'content.json');
+const c = JSON.parse(fs.readFileSync(fs.existsSync(contentPath) ? contentPath : legacyPath, 'utf8'));
+
+const example = fs.readFileSync(path.join(HERE, 'report-kit', 'voorbeeld.html'), 'utf8');
+const sprite = (example.match(/<svg width="0" height="0"[\s\S]*?<\/svg>/) || [''])[0];
+const headRaw = example.slice(0, example.indexOf('</head>') + 7);
+
+const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[ch]));
+const mask = (s) => String(s || '')
+  .replace(/\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]*\b/g, '[JWT]')
+  .replace(/([?&](?:token|key|secret|code|session)=)[^&\s]+/gi, '$1[REDACTED]')
+  .replace(/\b(password|passwd|pwd|secret|token|session|authorization|cookie)\b\s*[:=]\s*["']?[^"'\s,}]+/gi, '$1: [REDACTED]')
+  .replace(/\b[A-Za-z0-9+/=_-]{60,}\b/g, '[REDACTED]')
+  .replace(/([A-Za-z0-9._%+-])[A-Za-z0-9._%+-]*@([A-Za-z0-9.-]+\.[A-Za-z]{2,})/g, '$1***@$2')
+  .replace(/\b(sk|pk|api|tok)[-_][A-Za-z0-9_-]{6,}/gi, '***')
+  .replace(/\b[A-Fa-f0-9]{32,}\b/g, '***');
+
+// Evidence can be a string, an array or a structured object. Never let JSON print
+// as "[object Object]" in a customer-facing report.
+const textOf = (value, max = 12000) => {
+  if (value === null || value === undefined) return '';
+  if (typeof value === 'string') return value.slice(0, max);
+  if (typeof value === 'number' || typeof value === 'boolean') return String(value);
+  if (Array.isArray(value)) {
+    return value.map((item) => textOf(item, max)).filter(Boolean).join('\n\n').slice(0, max);
+  }
+  if (typeof value === 'object') {
+    try {
+      const json = JSON.stringify(value, (key, val) => (
+        typeof val === 'string' && val.length > 4000 ? `${val.slice(0, 4000)}\n... [ingekort]` : val
+      ), 2);
+      return String(json || '').slice(0, max);
+    } catch {
+      return String(value ?? '').slice(0, max);
+    }
+  }
+  return String(value).slice(0, max);
+};
+const joinText = (values, max = 12000) => values.map((value) => textOf(value, max)).filter(Boolean).join('\n\n').slice(0, max);
+const SEV_LABEL = { kritiek: 'Kritiek', hoog: 'Hoog', middel: 'Middel', laag: 'Laag', info: 'Info' };
+const SEV_RANK = { kritiek: 0, hoog: 1, middel: 2, laag: 3, info: 4 };
+const clamp = (n) => Math.min(5, Math.max(1, Number(n) || 1));
+
+// ---------- order findings by urgency, renumber, remap plan refs ----------
+const origToNew = new Map();
+const NL_SEV = { critical: 'kritiek', high: 'hoog', medium: 'middel', low: 'laag', info: 'info' };
+const findings = (c.findings || []).map((f, i) => {
+  const ease = clamp(f.ease), impact = clamp(f.impact);
+  // severity comes from the scan, never from the writer: the AI can describe, not re-grade.
+  // findings are matched by src_n so a merged item keeps the worst severity it covers.
+  const refs = Array.isArray(f.src_n) ? f.src_n.map(Number).filter((n) => n >= 1) : [i + 1];
+  const rawRefs = refs.map((n) => data.findings?.[n - 1]).filter(Boolean);
+  const evidenceItems = refs.flatMap((n) => evidenceByIndex.get(n)?.items || []);
+  const sevs = refs.map((n) => NL_SEV[String(data.findings?.[n - 1]?.severity || '').toLowerCase()]).filter(Boolean);
+  const worst = sevs.sort((a, b) => (SEV_RANK[a] ?? 9) - (SEV_RANK[b] ?? 9))[0];
+  return {
+    ...f, ease, impact, zone: ease * impact, _orig: refs[0] || i + 1, _refs: refs, _raw: rawRefs, _evidence: evidenceItems,
+    sev: worst || String(f.sev || 'info').toLowerCase(),
+  };
+});
+findings.sort((a, b) => (b.zone - a.zone) || ((SEV_RANK[a.sev] ?? 9) - (SEV_RANK[b.sev] ?? 9)) || (b.ease - a.ease));
+findings.forEach((f, i) => { f.n = i + 1; origToNew.set(f._orig, i + 1); });
+
+const counts = { kritiek: 0, hoog: 0, middel: 0, laag: 0, info: 0 };
+findings.forEach((f) => { counts[f.sev] = (counts[f.sev] || 0) + 1; });
+const urgent = counts.kritiek + counts.hoog;
+const klein = counts.laag + counts.info;
+const sevPresent = ['kritiek', 'hoog', 'middel', 'laag', 'info'].filter((s) => counts[s] > 0);
+
+// ---------- glossary + inline terms ----------
+const glossary = (c.glossary || []).map((g) => ({ id: String(g.id || '').replace(/[^a-z0-9-]/gi, ''), term: g.term, def: g.def }));
+const usedTermIds = new Set();
+function withTerms(text) {
+  let html = esc(text);
+  const tokens = [];
+  // Longest term first. Insert a neutral placeholder instead of markup so a later
+  // term such as "SPA" can never match the "spa" inside an earlier "<span>" tag.
+  const ordered = [...glossary].sort((a, b) => String(b.term || '').length - String(a.term || '').length);
+  for (const g of ordered) {
+    if (!g.term || !g.id) continue;
+    const safe = esc(g.term);
+    const pattern = new RegExp(
+      `(?<![\\p{L}\\p{N}])${safe.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?![\\p{L}\\p{N}])`,
+      'iu',
+    );
+    const match = pattern.exec(html);
+    if (!match || match.index < 0) continue;
+    const token = `\u0001${tokens.length}\u0001`;
+    tokens.push({ id: g.id, text: html.slice(match.index, match.index + match[0].length) });
+    html = html.slice(0, match.index) + token + html.slice(match.index + match[0].length);
+    usedTermIds.add(g.id);
+  }
+  return html.replace(/\u0001(\d+)\u0001/g, (_, index) => {
+    const token = tokens[Number(index)];
+    return token ? `<span class="term" data-term="${token.id}">${token.text}</span>` : '';
+  });
+}
+
+// ---------- severity bar ----------
+const segs = sevPresent.map((s, i) => `<span class="sevbar__seg" data-sev="${s}" style="--n:${counts[s]};--i:${i}"></span>`).join('\n              ');
+const legend = sevPresent.map((s) => `<li data-sev="${s}"><b>${counts[s]}</b> ${s}</li>`).join('\n              ');
+
+const alertBlock = urgent > 0 ? `
+      <div class="alert" data-reveal>
+        <span class="alert__icon"><svg class="i" aria-hidden="true"><use href="#i-alert"/></svg></span>
+        <div class="alert__body">
+          <p class="alert__title">${esc(c.alert_title || 'Direct actie nodig')}</p>
+          <p>${withTerms(c.alert_text || '')}</p>
+        </div>
+        <button class="btn btn--danger btn--sm" type="button" data-open="1">Bekijk punt 1<svg class="i i--xs go" aria-hidden="true"><use href="#i-arrow"/></svg></button>
+      </div>` : '';
+
+// ---------- findings ----------
+const findingHtml = findings.map((f) => {
+  const sevLabel = SEV_LABEL[f.sev] || 'Info';
+  const statusRaw = String(f.status || '').toLowerCase();
+  const partial = statusRaw.startsWith('deels') || statusRaw.startsWith('part');
+  const suspected = partial || statusRaw.startsWith('vermoed');
+  const statusLabel = partial ? 'Deels bevestigd' : suspected ? 'Vermoedelijk' : 'Bevestigd';
+  const statusIcon = suspected ? 'help' : 'check';
+  const raw = f._raw || [];
+  const structured = (f._evidence || []).filter((e) => e.command || e.result).slice(0, 2);
+  const req = esc(mask(joinText([f.request, ...raw.map((x) => x.request || x.endpoint)])));
+  const res = esc(mask(joinText([f.response, ...raw.map((x) => x.response)])));
+  const proof = esc(mask(joinText(raw.map((x) => x.evidence ?? x.proof))));
+  const flags = [...new Set(raw.map((x) => x.flag).filter(Boolean))];
+  const exactHtml = structured.map((item) => `
+                <div><h5>Uitgevoerd door ${esc(item.agent || 'agent')}${item.status ? ` (${esc(item.status)})` : ''}</h5><div class="code-wrap"><pre class="code">${esc(mask(textOf(item.command || '')))}</pre></div></div>
+                ${item.result ? `<div><h5>Serverantwoord</h5><div class="code-wrap"><pre class="code">${esc(mask(textOf(item.result)))}</pre></div></div>` : ''}`).join('');
+  return `
+        <details class="finding" id="punt-${f.n}" data-finding data-n="${f.n}" data-ease="${f.ease}" data-impact="${f.impact}" data-sev="${f.sev}" data-status="${partial ? 'deels_bevestigd' : suspected ? 'vermoedelijk' : 'bevestigd'}">
+          <summary class="finding__row">
+            <span class="finding__num">${String(f.n).padStart(2, '0')}</span>
+            <span class="finding__main"><span class="finding__title">${esc(f.title)}</span><code class="where">${esc(f.where || '')}</code></span>
+            <span class="chip" data-sev="${f.sev}">${sevLabel}</span>
+            <svg class="i chev" aria-hidden="true"><use href="#i-chev"/></svg>
+          </summary>
+          <div class="finding__body">
+            <dl class="qa">
+              <div><dt><svg class="i i--sm" aria-hidden="true"><use href="#i-eye"/></svg>Wat is er aan de hand?</dt><dd data-lede>${withTerms(f.lede)}</dd></div>
+              <div class="qa__risk"><dt><svg class="i i--sm" aria-hidden="true"><use href="#i-alert"/></svg>Wat kan er misgaan?</dt><dd>${withTerms(f.risk)}</dd></div>
+              <div class="qa__fix"><dt><svg class="i i--sm" aria-hidden="true"><use href="#i-wrench"/></svg>Wat moet er gebeuren?</dt><dd>${withTerms(f.fix)}</dd></div>
+            </dl>
+            <div class="finding__meta">
+              <div class="meter" data-value="${f.ease}"><span>Makkelijk te misbruiken</span><b>${f.ease} van 5</b></div>
+              <div class="meter" data-value="${f.impact}"><span>Schade</span><b>${f.impact} van 5</b></div>
+              <span class="status${suspected ? ' status--suspected' : ''}"><svg class="i i--xs" aria-hidden="true"><use href="#i-${statusIcon}"/></svg>${statusLabel}</span>
+              ${f.status_note ? `<p style="flex-basis:100%;font-size:12px;line-height:1.55;color:var(--muted);margin:8px 0 0">${esc(f.status_note)}</p>` : ''}
+            </div>
+            <details class="techbox">
+              <summary><svg class="i i--xs" aria-hidden="true"><use href="#i-code"/></svg>Technisch bewijs<svg class="i chev" aria-hidden="true"><use href="#i-chev"/></svg></summary>
+              <div class="tech">
+                ${exactHtml || `
+                ${req ? `<div><h5>Verzoek</h5><div class="code-wrap"><pre class="code">${req}</pre></div></div>` : ''}
+                ${res ? `<div><h5>Antwoord van de server</h5><div class="code-wrap"><pre class="code">${res}</pre></div></div>` : ''}`}
+                ${proof ? `<div><h5>Bewijs</h5><p style="white-space:pre-wrap;font:400 13px/1.6 var(--mono);margin:0">${proof}</p></div>` : ''}
+                <div class="tech__cols">
+                  <div><h5>Oorzaak</h5><p>${esc(f.cause || '')}</p></div>
+                  <div><h5>Technische oplossing</h5><p>${esc(f.solution || '')}</p></div>
+                </div>
+                <p class="tech__note">Beoordeling: schade ${f.impact} van 5, misbruik ${f.ease} van 5. ${esc(f.note || '')}${flags.length ? ` Testflag: ${flags.map((flag) => `<code>${esc(flag)}</code>`).join(' ')}` : ''}</p>
+              </div>
+            </details>
+          </div>
+        </details>`;
+}).join('\n');
+
+// ---------- plan ----------
+const phase = (num, title, sub, tasks) => `
+        <li class="card phase">
+          <div class="phase__head">
+            <span class="phase__num" aria-hidden="true">${num}</span>
+            <div><h3>${title}</h3><p>${sub}</p></div>
+          </div>
+          <ul class="tasks">
+            ${(tasks && tasks.length) ? tasks.map((task, ti) => `
+            <li class="task">
+              <p class="task__title"><span class="task__letter" aria-hidden="true">${String.fromCharCode(65 + ti)}</span>${esc(task.title)}</p>
+              <p class="task__text">${withTerms(task.text)}</p>
+              <p class="task__meta">Lost op
+                ${(task.refs || []).map((r) => `<button class="ref" type="button" data-open="${origToNew.get(Number(r)) || 1}" aria-label="Bekijk punt ${origToNew.get(Number(r)) || 1}">${origToNew.get(Number(r)) || 1}</button>`).join(' ')}
+                <span class="task__effort">Moeite: ${esc(task.effort || 'middel')}</span>
+              </p>
+            </li>`).join('') : '<li class="task"><p class="task__text">Niets nodig.</p></li>'}
+          </ul>
+        </li>`;
+
+const p = c.plan || {};
+const planHtml = phase(1, 'Vandaag', 'Kritiek en hoog', p.vandaag) + phase(2, 'Deze week', 'Middel en klein werk', p.week) + phase(3, 'Deze maand', 'De rest', p.maand);
+
+// ---------- background ----------
+const goodHtml = (c.good || []).map((g) => `<li><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg><div><b>${esc(g.title)}</b><span>${esc(g.text)}</span>${g.proof ? `<code>${esc(textOf(g.proof))}</code>` : ''}</div></li>`).join('\n              ');
+const budgetExhausted = scan.status === 'BUDGET_EXHAUSTED'
+  || (Number(scan.budgetUsd) > 0 && Number(scan.spentUsd || 0) / Number(scan.budgetUsd) >= 0.97);
+const budgetAmounts = `$${Number(scan.spentUsd || 0).toFixed(2)} van $${Number(scan.budgetUsd || 0).toFixed(2)}`;
+const budgetLimitHtml = budgetExhausted
+  ? `<li><svg class="i i--sm" aria-hidden="true"><use href="#i-help"/></svg><div><b>Budgetplafond bereikt</b><span>De run stopte op het budgetplafond (${esc(budgetAmounts)}). Niet alle paden en combinaties zijn getest; een volgende run kan de rest afdekken.</span></div></li>`
+  : '';
+const limitsHtml = (c.limits || []).map((l) => `<li><svg class="i i--sm" aria-hidden="true"><use href="#i-help"/></svg><div><b>${esc(l.title)}</b><span>${esc(l.text)}</span></div></li>`).join('\n              ') + budgetLimitHtml;
+const budgetNotice = budgetExhausted
+  ? `<div style="border:1px solid #F59E0B;background:#FFFBEB;padding:16px 20px;margin:0 0 24px;border-radius:2px;font-size:14px;line-height:1.65;color:#78350F"><b>Let op: het budgetplafond is bereikt.</b> De scan stopte na ${esc(budgetAmounts)}. De bevindingen hieronder zijn bevestigd, maar de dekking is niet compleet: niet elk pad en elke combinatie is getest.</div>`
+  : '';
+const glossHtml = glossary.map((g) => `<div id="woord-${g.id}"><dt>${esc(g.term)}</dt><dd>${esc(g.def)}</dd></div>`).join('\n              ');
+
+const started = scan.startedAt ? new Date(scan.startedAt).toLocaleString('nl-NL', { dateStyle: 'long', timeStyle: 'short' }) : '';
+const ended = scan.endedAt ? new Date(scan.endedAt).toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit' }) : '';
+const startTime = scan.startedAt ? new Date(scan.startedAt).toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit' }) : '';
+const host = scan.host || 'website';
+
+// ---------- proven attack chain (only when threat_demo.mjs has run) ----------
+const attackPath = path.join(dir, 'attack-chain.json');
+let attack = null;
+try { if (fs.existsSync(attackPath)) attack = JSON.parse(fs.readFileSync(attackPath, 'utf8')); } catch { attack = null; }
+const attackDuration = attack
+  ? (Number(attack.impact?.durationMs || 0) < 1000 ? `${Number(attack.impact?.durationMs || 0)} ms` : `${(Number(attack.impact?.durationMs || 0) / 1000).toFixed(1)} s`)
+  : '';
+const proofText = (step) => {
+  const p = step.proof || {};
+  const parts = [];
+  if (p.flag) parts.push(`Flag: ${p.flag}`);
+  if (p.crossOwnerInvoices) parts.push(`${p.crossOwnerInvoices.length} facturen van andere eigenaren`);
+  if (p.privateFilesRead) parts.push(`${p.privateFilesRead.length} privébestanden van andere gebruikers`);
+  if (p.secretCount) parts.push(`${p.secretCount} secrets uit de database`);
+  if (p.secretNames?.length) parts.push(p.secretNames.join(', '));
+  if (p.restrictedFile) parts.push(`besloten bestand ${p.restrictedFile} gelezen`);
+  if (p.path) parts.push(`pad: ${p.path}`);
+  if (p.scope) parts.push(`scope: ${p.scope}`);
+  if (p.pivot) parts.push(`pivot naar ${p.pivot}`);
+  if (p.cookieIssued) parts.push('sessiecookie ontvangen');
+  if (p.role) parts.push(`rol: ${p.role}`);
+  return parts.join(' · ');
+};
+const attackSteps = (attack?.steps || []).map((step) => `
+            <li style="padding:16px 0;border-bottom:1px solid var(--line)">
+              <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+                <span class="chip">Stap ${Number(step.n)}</span>
+                <strong>${esc(step.title)}</strong>
+                <span class="status"><svg class="i i--xs" aria-hidden="true"><use href="#i-check"/></svg>HTTP ${esc(step.response?.status)}</span>
+              </div>
+              <p style="font:500 12px/1.5 var(--mono);color:var(--muted);margin:8px 0 0;word-break:break-all">${esc(step.request?.method)} ${esc(step.request?.url)}</p>
+              ${proofText(step) ? `<p style="margin:6px 0 0;font-size:13px"><strong>Bewijs:</strong> ${esc(mask(proofText(step)))}</p>` : ''}
+            </li>`).join('');
+const attackInvoiceRows = (attack?.data?.invoices || []).map((invoice) => `
+              <tr><td>${esc(invoice.number)}</td><td>${esc(invoice.account)}</td><td>${esc(invoice.currency)} ${Number(invoice.total || 0).toFixed(2)}</td><td>${esc(invoice.owner)}</td></tr>`).join('');
+const attackPrivateRows = (attack?.data?.privateFiles || []).map((file) => `
+              <tr><td>${esc(file.id)}</td><td>${esc(file.name)}</td><td>${esc(file.owner?.email || file.owner || '')}</td></tr>`).join('');
+const attackSecrets = (attack?.data?.secretNames || []).join(', ');
+const ai = attack?.impact || {};
+const aInvoices = Number(ai.invoicesRead || 0);
+const aCustomers = Number(ai.customersExposed || 0);
+const aPrivate = Number(ai.privateFilesRead || 0);
+const aRestricted = Number(ai.restrictedFilesRead || 0);
+const aSecrets = Number(ai.secretsExposed || 0);
+const aSecretFiles = Number(ai.secretFilesRead || 0);
+const aAdmin = Number(ai.adminApps || 0);
+const aPivots = Number(ai.pivotedApps || 0);
+const aFlags = Number(ai.flags || 0);
+const aAccounts = Number(ai.attackerAccounts || 1);
+const attackCardData = [
+  { label: 'Facturen', value: aInvoices, note: 'van andere eigenaren' },
+  { label: 'Klanten', value: aCustomers, note: 'klantnamen en bedragen' },
+  { label: 'Privébestanden', value: aPrivate, note: 'van andere gebruikers' },
+  { label: 'Besloten bestanden', value: aRestricted, note: 'achter een 403-blokkade' },
+  { label: 'Secrets', value: aSecrets, note: 'wachtwoorden, sleutels of tokens' },
+  { label: 'Geheime bestanden', value: aSecretFiles, note: 'buiten de uploadmap' },
+  { label: 'Admin-apps', value: aAdmin, note: 'beheerders toegang' },
+  { label: 'Flags', value: aFlags, note: 'bewezen testbewijs' },
+].filter((card) => card.value > 0);
+const attackCards = attackCardData.map((card) => `<div class="card stat"><p class="stat__label">${esc(card.label)}</p><p class="stat__value" data-count="${card.value}">${card.value}</p><p class="stat__note">${esc(card.note)}</p></div>`).join('');
+const attackDataParts = [];
+if (attackInvoiceRows) attackDataParts.push(`<h3 style="margin:0 0 8px">Facturen</h3><table style="width:100%;border-collapse:collapse;font-size:13px"><thead><tr><th style="text-align:left;padding:8px;border-bottom:1px solid var(--line)">Factuur</th><th style="text-align:left;padding:8px;border-bottom:1px solid var(--line)">Klant</th><th style="text-align:left;padding:8px;border-bottom:1px solid var(--line)">Bedrag</th><th style="text-align:left;padding:8px;border-bottom:1px solid var(--line)">Eigenaar</th></tr></thead><tbody>${attackInvoiceRows}</tbody></table>`);
+if (attackPrivateRows) attackDataParts.push(`<h3 style="margin:${attackDataParts.length ? '24px' : '0'} 0 8px">Privébestanden</h3><table style="width:100%;border-collapse:collapse;font-size:13px"><thead><tr><th style="text-align:left;padding:8px;border-bottom:1px solid var(--line)">ID</th><th style="text-align:left;padding:8px;border-bottom:1px solid var(--line)">Bestand</th><th style="text-align:left;padding:8px;border-bottom:1px solid var(--line)">Eigenaar</th></tr></thead><tbody>${attackPrivateRows}</tbody></table>`);
+if (attack && attack.data?.restrictedFile) attackDataParts.push(`<p style="margin:18px 0 0;font-size:13px"><strong>Besloten bestand:</strong> <code>${esc(attack.data.restrictedFile.name)}</code> (HTTP ${esc(attack.data.restrictedFile.status)})</p>`);
+if (attack && attack.data?.secretFile?.flag) attackDataParts.push(`<p style="margin:10px 0 0;font-size:13px"><strong>Geheim bestand:</strong> <code>${esc(attack.data.secretFile.path)}</code> · <code>${esc(attack.data.secretFile.flag)}</code></p>`);
+if (attackSecrets) attackDataParts.push(`<p style="margin:18px 0 0;font-size:13px"><strong>Secrets uit de database:</strong> <code>${esc(attackSecrets)}</code></p>`);
+const attackData = attackDataParts.join('');
+const attackBannerParts = [
+  aInvoices ? `${aInvoices} factuur${aInvoices === 1 ? '' : 'en'} van ${aCustomers} klant${aCustomers === 1 ? '' : 'en'}` : '',
+  aPrivate ? `${aPrivate} privébestand${aPrivate === 1 ? '' : 'en'}` : '',
+  aRestricted ? `${aRestricted} besloten bestand${aRestricted === 1 ? '' : 'en'}` : '',
+  aSecrets ? `${aSecrets} secret${aSecrets === 1 ? '' : 's'}` : '',
+  aSecretFiles ? `${aSecretFiles} geheim bestand${aSecretFiles === 1 ? '' : 'en'}` : '',
+  aAdmin ? `admin op ${aAdmin} app${aAdmin === 1 ? '' : 's'}` : '',
+  `${aFlags} flag${aFlags === 1 ? '' : 's'}`,
+].filter(Boolean).join(', ');
+const attackTargetKinds = [
+  aInvoices ? 'klantgegevens' : '',
+  aPrivate ? 'privébestanden' : '',
+  aRestricted ? 'besloten bestanden' : '',
+  aSecrets ? 'wachtwoorden en sleutels' : '',
+  aSecretFiles ? 'geheime bestanden' : '',
+  aAdmin ? 'beheerdersomgevingen' : '',
+].filter(Boolean).join(', ');
+const attackSubtitle = `Uitgevoerd met ${aAccounts} publieke demo-account${aAccounts === 1 ? '' : 's'}, zonder speciaal gereedschap. Dit zijn de echte requests en serverantwoorden.`;
+const attackSection = attack ? `
+  <section class="section section--white" id="aanvalsketen" aria-labelledby="aanvalsketen-titel">
+    <div class="wrap">
+      <header class="section__head" data-reveal>
+        <p class="eyebrow">Bewezen aanval</p>
+        <h2 id="aanvalsketen-titel">Dit is geen theorie: in ${esc(attackDuration)} ${esc((attack.title || 'van demo-login naar impact').replace(/^Van /, 'van '))}</h2>
+        <p class="lede">${esc(attack.conclusion)}</p>
+      </header>
+
+      <div class="stats" data-stagger>
+        ${attackCards}
+      </div>
+
+      <div class="card" style="padding:24px;margin-top:20px">
+        <h3 style="margin:0 0 4px">De keten, stap voor stap</h3>
+        <p style="color:var(--muted);font-size:13px;margin:0 0 8px">${esc(attackSubtitle)}</p>
+        <ol style="list-style:none;padding:0;margin:0">
+          ${attackSteps}
+        </ol>
+      </div>
+
+      <div class="card" style="padding:24px;margin-top:20px;overflow-x:auto">
+        <h3 style="margin:0 0 12px">Wat de aanvaller heeft gezien</h3>
+        <p style="color:var(--muted);font-size:13px;margin:0 0 12px">Synthetische testdata op de testopstelling. Geen echte klantgegevens.</p>
+        ${attackData || '<p style="margin:0">Geen losse records nodig: de flags en serverantwoorden hierboven zijn het bewijs.</p>'}
+        <p style="margin:18px 0 0;font-size:13px"><strong>Demo-accounts:</strong> ${aAccounts} · <strong>Flags:</strong> ${aFlags}${aAdmin ? ` · <strong>Admin op:</strong> ${aAdmin} apps` : ''}${aPivots ? ` · <strong>Extra apps via pivot:</strong> ${aPivots}` : ''}</p>
+      </div>
+
+      <div style="border-left:4px solid #DC2626;background:#FEF2F2;padding:18px 22px;margin-top:20px">
+        <p style="margin:0 0 6px;font-weight:700;color:#991B1B">Waarom dit vandaag moet</p>
+        <p style="margin:0;line-height:1.65">Een aanvaller heeft alleen de publieke demo-account${aAccounts === 1 ? '' : 's'} nodig die op de loginpagina${aAccounts === 1 ? ' staat' : "'s staan"}. Geen klantwachtwoord, geen speciaal gereedschap. De keten is herhaalbaar en raakt ${attackTargetKinds || 'deze omgeving'}. Elke minuut dat de kritieke paden open staan, is dit opnieuw uitvoerbaar.</p>
+      </div>
+      <p style="color:var(--muted);font-size:12px;margin-top:14px">Bron: gecontroleerde threat-demo, uitgevoerd op de testopstelling. Exacte request/response-bewijslast staat in de bevindingen en in <a href="#testbewijs">Testbewijs</a>.</p>
+    </div>
+  </section>
+` : '';
+const attackNav = attack ? '<a href="#aanvalsketen">Aanvalsketen</a>' : '';
+const attackBannerSubject = aAccounts === 1
+  ? 'De publieke demo-account was genoeg voor'
+  : 'De publieke demo-accounts waren genoeg voor';
+const attackBanner = attack ? `<div style="border:2px solid #DC2626;background:#FEF2F2;padding:16px 20px;margin:0 0 20px;border-radius:2px;color:#7F1D1D"><b>Bewezen aanval, geen scanruis.</b> ${attackBannerSubject} ${attackBannerParts}. De keten staat hieronder stap voor stap.</div>` : '';
+
+// ---------- human dossier: agent thoughts, then a short mission summary ----------
+const dossierPath = path.join(dir, 'dossier.jsonl');
+const dossierFile = (() => {
+  try {
+    return fs.readFileSync(dossierPath, 'utf8').split('\n').filter(Boolean).map((line) => {
+      try { return JSON.parse(line); } catch { return null; }
+    }).filter(Boolean);
+  } catch { return []; }
+})();
+const agentNames = { mapper: 'Mapper', authz: 'Authz', injector: 'Injector', exploiter: 'Exploiter', chain: 'Chain', reporter: 'Reporter' };
+const agentVisuals = {
+  mapper: { color: '#0F766E', background: '#F0FDFA', border: '#14B8A6' },
+  authz: { color: '#1D4ED8', background: '#EFF6FF', border: '#3B82F6' },
+  injector: { color: '#B45309', background: '#FFFBEB', border: '#F59E0B' },
+  chain: { color: '#A21CAF', background: '#FDF4FF', border: '#D946EF' },
+  exploiter: { color: '#6D28D9', background: '#F5F3FF', border: '#8B5CF6' },
+  reporter: { color: '#C2410C', background: '#FFF7ED', border: '#FB923C' },
+  agent: { color: '#475569', background: '#F8FAFC', border: '#94A3B8' },
+};
+const importantNotePattern = /\b(kritiek|critical|urgent|onmiddellijk|wachtwoord|password|beheerder|admin|toegang|access|bypass|omzeil|lek|leak|privé|private|factuur|invoice|sleutel|key|token|rce|injectie|injection|overname|takeover|misbruik|exploit)\b/i;
+function isImportantNote(text) {
+  return importantNotePattern.test(text);
+}
+function agentVisual(agent) {
+  return agentVisuals[agent] || agentVisuals.agent;
+}
+const dossierEntries = dossierFile
+  .filter((entry) => entry && entry.text)
+  .map((entry) => ({
+    from: entry.from || entry.agent || 'agent',
+    text: String(entry.text || '')
+      .replace(/HMW\{[^}]+\}/g, '[testflag]')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .slice(0, 400),
+    source: entry.source === 'final' ? 'dossier' : (entry.source || 'dossier'),
+  }))
+  .filter((entry) => entry.text)
+  .slice(-10);
+const narrativeLines = [];
+if (attack) {
+  narrativeLines.push('De eerste blik op de login gaf weinig weg.');
+  if (aInvoices) narrativeLines.push('Het eerste dat opviel was een factuurnummer dat niet van de aanvaller was.');
+  if (aPrivate) narrativeLines.push('Daarna kwamen privébestanden van andere gebruikers in beeld.');
+  if (aRestricted) narrativeLines.push('De besloten map bleek dichterbij dan hij leek.');
+  if (aSecrets) narrativeLines.push('De zoekfunctie gaf uiteindelijk de sleutels van de omgeving prijs.');
+  if (aAdmin) narrativeLines.push('Binnen enkele stappen stond de zwerm als beheerder in de console.');
+  narrativeLines.push('Wat als een losse test begon, werd een keten van de ene app naar de volgende.');
+} else {
+  narrativeLines.push('De zwerm begon breed en bleef zoeken naar de zwakste plek.');
+}
+const dossierIntro = attack
+  ? 'Het begon bij een login. Daarna bleef de zwerm trekken, van het ene antwoord naar het volgende.'
+  : 'De zwerm begon breed en ging steeds dieper op wat hij vond.';
+const dossierLede = dossierEntries.length
+  ? 'Korte notities uit de missie, in gewone taal. Elke agent heeft een eigen kleur. Wat een waarschuwing verdient, staat rood onderstreept met een WAARSCHUWING-label.'
+  : 'Deze run had nog geen aparte gedachtennotities. Dit is de korte samenvatting uit de missielog, in gewone taal.';
+const dossierLegend = dossierEntries.length
+  ? `<div style="display:flex;flex-wrap:wrap;gap:8px 16px;align-items:center;margin:0 0 18px;padding:12px 14px;border:1px solid var(--line);background:var(--surface);border-radius:2px;font-size:11px;letter-spacing:.02em">
+      ${Object.entries(agentVisuals).filter(([key]) => key !== 'agent').map(([key, visual]) => `<span style="display:inline-flex;align-items:center;gap:6px;color:${visual.color}"><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${visual.border}"></span>${esc(agentNames[key] || key)}</span>`).join('')}
+      <span style="display:inline-flex;align-items:center;gap:6px;margin-left:auto;color:#991B1B;font-weight:700"><span style="display:inline-flex;align-items:center;justify-content:center;width:15px;height:15px;border:1px solid #DC2626;background:#FEE2E2;color:#991B1B;border-radius:2px;font-size:10px">!</span>WAARSCHUWING = belangrijk</span>
+    </div>`
+  : '';
+const dossierBody = dossierEntries.length
+  ? `<div style="display:grid;gap:14px">${dossierEntries.map((entry) => {
+    const visual = agentVisual(entry.from);
+    const important = isImportantNote(entry.text);
+    const quoteStyle = important
+      ? 'margin:0 0 6px;line-height:1.65;color:#991B1B;text-decoration:underline;text-decoration-color:#FCA5A5;text-decoration-thickness:2px;text-underline-offset:3px'
+      : 'margin:0 0 6px;line-height:1.65';
+    return `<blockquote data-important="${important ? 'true' : 'false'}" style="margin:0;padding:14px 18px;border-left:4px solid ${important ? '#DC2626' : visual.border};background:${important ? '#FEF2F2' : visual.background};border:1px solid ${important ? '#FECACA' : 'var(--line)'};border-radius:2px">
+      <div style="display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:0 0 8px">
+        <span style="display:inline-flex;align-items:center;gap:6px;color:${visual.color};font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase"><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${important ? '#EF4444' : visual.border}"></span>${esc(agentNames[entry.from] || entry.from)}</span>
+        ${important ? '<span style="display:inline-flex;align-items:center;gap:4px;border:1px solid #FCA5A5;background:#FEE2E2;color:#991B1B;padding:2px 7px;border-radius:2px;font-size:10px;font-weight:700;letter-spacing:.08em">! WAARSCHUWING</span>' : ''}
+      </div>
+      <p style="${quoteStyle}">"${esc(mask(entry.text))}"</p>
+      <footer style="color:var(--muted);font-size:12px">${esc(agentNames[entry.from] || entry.from)} · ${esc(entry.source)}</footer>
+    </blockquote>`;
+  }).join('')}</div>`
+  : `<div style="display:grid;gap:10px">${narrativeLines.map((line) => `<p style="margin:0;line-height:1.7">${esc(line)}</p>`).join('')}</div><p style="margin:16px 0 0;color:var(--muted);font-size:12px">Samengevat uit de missielog. Nieuwe runs laten de agenten zelf korte gedachten schrijven.</p>`;
+const dossierSection = (dossierEntries.length || narrativeLines.length) ? `
+  <section class="section" id="dossier" aria-labelledby="dossier-titel">
+    <div class="wrap">
+      <header class="section__head" data-reveal>
+        <p class="eyebrow">Dossier</p>
+        <h2 id="dossier-titel">Wat de zwerm dacht</h2>
+        <p class="lede">${esc(dossierLede)}</p>
+      </header>
+      <div class="card" style="padding:24px">
+        <p style="margin:0 0 14px;color:var(--muted);line-height:1.65">${esc(dossierIntro)}</p>
+        ${dossierLegend}
+        ${dossierBody}
+      </div>
+    </div>
+  </section>
+` : '';
+const dossierNav = (dossierEntries.length || narrativeLines.length) ? '<a href="#dossier">Dossier</a>' : '';
+
+// ---------- raw test flags (lab scans only) ----------
+const rawFlagged = (data.findings || [])
+  .map((finding, index) => ({ finding, index: index + 1 }))
+  .filter(({ finding }) => finding.flag || /HMW\{/.test(String(finding.evidence || '')));
+const seenFlags = new Set();
+const flagRows = [];
+for (const { finding, index } of rawFlagged) {
+  const flag = finding.flag || (String(finding.evidence || '').match(/HMW\{[^}]+\}/) || [])[0];
+  if (!flag || seenFlags.has(flag)) continue;
+  seenFlags.add(flag);
+  flagRows.push({ flag, finding, evidenceItems: evidenceByIndex.get(index)?.items || [] });
+}
+const evidenceSection = flagRows.length ? `
+  <section class="section" id="testbewijs" aria-labelledby="testbewijs-titel">
+    <div class="wrap wrap--narrow">
+      <header class="section__head" data-reveal>
+        <p class="eyebrow">Testbewijs</p>
+        <h2 id="testbewijs-titel">${flagRows.length} testflags en ruwe bewijslast</h2>
+        <p class="lede">Deze testopstelling gebruikt HMW-flags als bewijs. Elke flag hieronder hoort bij een gevonden kwetsbaarheid en de ruwe request/response die hem opleverde. Deze sectie verschijnt alleen als een scan zulke testflags bevat.</p>
+      </header>
+      <div class="accordion" data-stagger>
+        ${flagRows.map(({ flag, finding, evidenceItems }, index) => `
+        <details class="acc">
+          <summary>
+            <span class="acc__icon"><svg class="i" aria-hidden="true"><use href="#i-flag"/></svg></span>
+            <span class="acc__title">${esc(finding.id || `Bewijs ${index + 1}`)}<small><code>${esc(flag)}</code> ${esc(finding.title || '')}</small></span>
+            <svg class="i chev" aria-hidden="true"><use href="#i-chev"/></svg>
+          </summary>
+          <div class="acc__body">
+            <p><b>Flag:</b> <code>${esc(flag)}</code></p>
+            <p><b>Endpoint:</b> <code>${esc(finding.endpoint || '')}</code></p>
+            ${evidenceItems.slice(0, 2).map((item) => `<div style="margin-top:14px"><h5 style="margin:0 0 6px">Uitgevoerd door ${esc(item.agent || 'agent')}${item.status ? ` (${esc(item.status)})` : ''}</h5><div class="code-wrap"><pre class="code">${esc(mask(textOf(item.command || '')))}</pre></div>${item.result ? `<h5 style="margin:12px 0 6px">Serverantwoord</h5><div class="code-wrap"><pre class="code">${esc(mask(textOf(item.result)))}</pre></div>` : ''}</div>`).join('')}
+            ${!evidenceItems.length ? `<p style="white-space:pre-wrap;font:400 13px/1.65 var(--mono);margin:12px 0 0">${esc(mask(textOf(finding.evidence ?? finding.proof)))}</p>` : ''}
+          </div>
+        </details>`).join('\n        ')}
+      </div>
+    </div>
+  </section>
+` : '';
+
+const adviceSection = advice ? `
+  <section class="section" id="advies" aria-labelledby="advies-titel" style="padding-top:0">
+    <div class="wrap">
+      <div data-reveal style="border:1px solid #DCE3EC;border-left:4px solid #0056D2;background:#F8FAFC;padding:26px 28px">
+        <p class="eyebrow" style="color:#0056D2">Adviesagent</p>
+        <h2 id="advies-titel" style="margin:8px 0 10px;font-size:26px;line-height:1.2">Meer budget, meer dekking</h2>
+        <p style="margin:0 0 10px;font-size:18px;font-weight:600;line-height:1.4">${esc(advice.headline || '')}</p>
+        <p style="margin:0 0 18px;line-height:1.7">${esc(advice.summary || '')}</p>
+        <div style="display:grid;gap:12px">
+          ${(advice.items || []).map((item) => `
+          <article style="border:1px solid #DCE3EC;background:#FFFFFF;padding:16px 18px">
+            <div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px;flex-wrap:wrap">
+              <h3 style="margin:0;font-size:17px;line-height:1.35">${esc(item.title || '')}</h3>
+              <span style="font:600 12px/1 var(--mono);color:#0056D2;white-space:nowrap">+ $${Number(item.extraBudgetUsd || 0).toFixed(0)}</span>
+            </div>
+            <p style="margin:8px 0 0;line-height:1.65">${esc(item.what || '')}</p>
+            ${item.why ? `<p style="margin:6px 0 0;color:#526173;font-size:13px;line-height:1.6">Waarom: ${esc(item.why)}</p>` : ''}
+            ${item.expected ? `<p style="margin:6px 0 0;color:#526173;font-size:13px;line-height:1.6">Verwacht: ${esc(item.expected)}</p>` : ''}
+          </article>`).join('')}
+        </div>
+        <p style="margin:16px 0 0;color:#526173;font-size:13px;line-height:1.65">${esc(advice.limits || 'Meer budget geeft meer dekking, geen garantie op nieuwe kwetsbaarheden.')}</p>
+        <p style="margin:16px 0 0;padding-top:14px;border-top:1px solid #DCE3EC;font-size:14px;line-height:1.65"><strong>Opnieuw draaien?</strong> De volgende run krijgt deze bevindingen, het vorige advies en de geteste gebieden mee. De swarm begint dan niet opnieuw bij nul.</p>
+        <p style="margin:10px 0 0;color:#7A8797;font-size:11px;line-height:1.5">Gegenereerd door de adviesagent${advice.model ? ` met ${esc(advice.model)}` : ''}${advice.previousScanId ? `, met context van run ${esc(advice.previousScanId)}` : ''}.</p>
+      </div>
+    </div>
+  </section>
+` : '';
+
+const head = headRaw
+  .replace(/<title>[^<]*<\/title>/, `<title>Beveiligingsrapport ${esc(host)}</title>`)
+  .replace(/<meta name="description" content="[^"]*">/, `<meta name="description" content="Beveiligingsrapport voor ${esc(host)} in gewone taal.">`)
+  .replace('<link rel="stylesheet" href="hackmywebsite-report.css">', '<link rel="stylesheet" href="../../report-kit/hackmywebsite-report.css">');
+
+const html = `${head}
+<body>
+${sprite}
+<a class="skip" href="#inhoud">Naar de inhoud</a>
+
+<header class="topbar">
+  <div class="wrap topbar__inner">
+    <a class="brand" href="#top" aria-label="hackmywebsite.ai, beveiligingsrapport ${esc(host)}, naar boven">
+      <span class="brand__mark"><svg class="i i--sm" aria-hidden="true"><use href="#i-shield"/></svg></span>
+      <span>hackmywebsite.ai<span class="brand__slash" aria-hidden="true">/</span><span class="brand__site">${esc(host)}</span></span>
+    </a>
+    <nav class="topnav" aria-label="Onderdelen">
+      <a href="#overzicht">Overzicht</a>
+      ${attackNav}
+      ${dossierNav}
+      <a href="#kaart">Risicokaart</a>
+      <a href="#plan">Stappenplan</a>
+      <a href="#bevindingen">Bevindingen</a>
+      <a href="#meer">Achtergrond</a>
+    </nav>
+    <div class="topbar__actions">
+      <button class="btn btn--ghost btn--icon" type="button" data-theme-toggle aria-label="Donker thema">
+        <svg class="i icon-moon" aria-hidden="true"><use href="#i-moon"/></svg>
+        <svg class="i icon-sun" aria-hidden="true"><use href="#i-sun"/></svg>
+      </button>
+      <button class="btn btn--primary" type="button" data-print aria-label="Afdrukken of bewaren als PDF">
+        <svg class="i i--sm" aria-hidden="true"><use href="#i-printer"/></svg><span class="btn__text">Afdrukken</span>
+      </button>
+    </div>
+  </div>
+  <span class="topbar__progress" data-progress aria-hidden="true"></span>
+</header>
+
+<section class="hero" id="top" aria-labelledby="titel">
+  <div class="wrap hero__inner">
+    <p class="eyebrow" data-enter style="--i:0">Beveiligingsrapport &middot; ${esc(started)}</p>
+    <h1 id="titel" data-enter style="--i:1">${esc(c.verdict_title || 'Beveiligingsrapport')}</h1>
+    <p class="hero__lede" data-enter style="--i:2">${withTerms(c.verdict_lede || '')}</p>
+    <div class="hero__actions" data-enter style="--i:3">
+      <a class="btn btn--primary btn--lg" href="#plan">Wat moet eerst?<svg class="i i--sm go" aria-hidden="true"><use href="#i-arrow"/></svg></a>
+      <a class="btn btn--secondary btn--lg" href="#bevindingen">Alle ${findings.length} bevindingen</a>
+      ${attack ? '<a class="btn btn--secondary btn--lg" href="#aanvalsketen">Bekijk de aanvalsketen</a>' : ''}
+    </div>
+    <ul class="hero__meta" data-enter style="--i:4">
+      <li><svg class="i i--xs" aria-hidden="true"><use href="#i-globe"/></svg>${esc(host)}</li>
+      <li><svg class="i i--xs" aria-hidden="true"><use href="#i-clock"/></svg>${esc(startTime)} tot ${esc(ended)}</li>
+      <li><svg class="i i--xs" aria-hidden="true"><use href="#i-scan"/></svg>Actief, van buitenaf</li>
+    </ul>
+  </div>
+</section>
+
+<main id="inhoud">
+
+${adviceSection}
+
+  <section class="section" id="overzicht" aria-labelledby="overzicht-titel">
+    <div class="wrap">
+      <header class="section__head" data-reveal>
+        <p class="eyebrow">Overzicht</p>
+        <h2 id="overzicht-titel">Zo staat het ervoor</h2>
+      </header>
+${alertBlock}
+${budgetNotice}
+${attackBanner}
+
+      <div class="stats" data-stagger>
+        <div class="card stat stat--wide">
+          <p class="stat__label"><svg class="i i--xs" aria-hidden="true"><use href="#i-shield-alert"/></svg>Bevindingen</p>
+          <div class="stat__row">
+            <p class="stat__value" data-count="${findings.length}">${findings.length}</p>
+            <p class="stat__note">verdeeld naar ernst</p>
+          </div>
+          <figure class="sevbar">
+            <div class="sevbar__track" aria-hidden="true">
+              ${segs}
+            </div>
+            <ul class="sevbar__legend">
+              ${legend}
+            </ul>
+          </figure>
+        </div>
+        <div class="card stat">
+          <p class="stat__label"><svg class="i i--xs" aria-hidden="true"><use href="#i-zap"/></svg>Vandaag oplossen</p>
+          <p class="stat__value" data-count="${urgent}">${urgent}</p>
+          <p class="stat__note">punt is kritiek of hoog</p>
+        </div>
+        <div class="card stat">
+          <p class="stat__label"><svg class="i i--xs" aria-hidden="true"><use href="#i-shield-check"/></svg>Afgeslagen</p>
+          <p class="stat__value" data-count="${(c.good || []).length}">${(c.good || []).length}</p>
+          <p class="stat__note">soorten aanvallen lukten niet</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+${attackSection}
+
+${dossierSection}
+
+  <section class="section section--white" id="kaart" aria-labelledby="kaart-titel">
+    <div class="wrap">
+      <header class="section__head" data-reveal>
+        <p class="eyebrow">Risicokaart</p>
+        <h2 id="kaart-titel">Rechtsboven is het gevaarlijkst</h2>
+        <p class="lede">Hoe hoger een punt staat, hoe groter de schade. Hoe verder naar rechts, hoe makkelijker het te misbruiken is. Wijs een nummer aan voor uitleg.</p>
+      </header>
+
+      <div class="card matrix" data-matrix data-reveal
+           data-y-labels="Klein|Beperkt|Merkbaar|Groot|Zeer groot"
+           data-x-labels="Zeer lastig|Lastig|Gemiddeld|Makkelijk|Heel makkelijk">
+        <figure class="matrix__chart">
+          <p class="axis axis--y" aria-hidden="true"><svg class="i i--xs" aria-hidden="true"><use href="#i-arrow-up"/></svg>Schade</p>
+          <div class="matrix__grid" role="group" aria-label="Risicokaart: ${findings.length} punten op schade en gemak van misbruik"></div>
+          <p class="axis axis--x" aria-hidden="true">Gemak van misbruik<svg class="i i--xs" aria-hidden="true"><use href="#i-arrow"/></svg></p>
+          <figcaption class="matrix__legend">
+            <ul class="legend" aria-label="Zones">
+              <li><span class="legend__zone" style="--z:var(--zone-4)"></span>Direct oplossen</li>
+              <li><span class="legend__zone" style="--z:var(--zone-3)"></span>Snel</li>
+              <li><span class="legend__zone" style="--z:var(--zone-2)"></span>Inplannen</li>
+              <li><span class="legend__zone" style="--z:var(--zone-1)"></span>Rustig</li>
+            </ul>
+            <ul class="legend" aria-label="Symbolen">
+              <li><span class="legend__marker"></span>Bevestigd</li>
+              <li><span class="legend__marker legend__marker--suspected"></span>Vermoedelijk</li>
+            </ul>
+          </figcaption>
+          <noscript><p class="lede">De kaart heeft JavaScript nodig. Alle punten staan ook bij de bevindingen.</p></noscript>
+        </figure>
+
+        <aside class="inspector" data-preview aria-live="polite" aria-label="Uitleg bij het gekozen punt">
+          <div class="inspector__body">
+            <p class="inspector__label">Punt <span data-slot="num">01</span></p>
+            <div class="inspector__badges">
+              <span class="chip" data-slot="sev" data-sev="${findings[0]?.sev || 'info'}">${SEV_LABEL[findings[0]?.sev] || 'Info'}</span>
+              <span class="inspector__status" data-slot="status">${String(findings[0]?.status || '').toLowerCase().startsWith('vermoed') ? 'Vermoedelijk' : 'Bevestigd met eigen test'}</span>
+            </div>
+            <h3 data-slot="title">${esc(findings[0]?.title || '')}</h3>
+            <p data-slot="lede">${esc(findings[0]?.lede || '')}</p>
+            <code class="where" data-slot="where">${esc(findings[0]?.where || '')}</code>
+            <div class="inspector__meters">
+              <div class="meter" data-slot="ease" data-value="${findings[0]?.ease || 1}"><span>Makkelijk te misbruiken</span><b>${findings[0]?.ease || 1} van 5</b></div>
+              <div class="meter" data-slot="impact" data-value="${findings[0]?.impact || 1}"><span>Schade</span><b>${findings[0]?.impact || 1} van 5</b></div>
+            </div>
+            <button class="btn btn--secondary btn--block" type="button" data-slot="open" data-open="1">Lees alles<svg class="i i--sm go" aria-hidden="true"><use href="#i-arrow"/></svg></button>
+          </div>
+        </aside>
+      </div>
+
+      <details class="note" data-reveal>
+        <summary>Hoe beoordelen we?<svg class="i chev" aria-hidden="true"><use href="#i-chev"/></svg></summary>
+        <p>De schade volgt uit de ernst van het punt. Het gemak van misbruik volgt uit het soort probleem en of er inloggegevens nodig waren. Dit zijn inschattingen op basis van het bewijs. Een <span class="term" data-term="vermoedelijk">vermoedelijk</span> punt zetten we een stap lager.</p>
+      </details>
+    </div>
+  </section>
+
+  <section class="section" id="plan" aria-labelledby="plan-titel">
+    <div class="wrap">
+      <header class="section__head" data-reveal>
+        <p class="eyebrow">Stappenplan</p>
+        <h2 id="plan-titel">Wat eerst, wat later</h2>
+        <p class="lede">Begin links. Klik op een nummer om dat punt te lezen.</p>
+      </header>
+
+      <ol class="phases" data-stagger>
+${planHtml}
+      </ol>
+    </div>
+  </section>
+
+  <section class="section section--white" id="bevindingen" aria-labelledby="bevindingen-titel">
+    <div class="wrap">
+      <header class="section__head" data-reveal>
+        <p class="eyebrow">Bevindingen</p>
+        <h2 id="bevindingen-titel">${findings.length} punten, kort uitgelegd</h2>
+        <p class="lede">Klik op een punt voor de uitleg in gewone taal. Het technische bewijs zit daaronder, voor je ontwikkelaar.</p>
+      </header>
+
+      <div class="toolbar" data-reveal>
+        <div class="segmented" role="group" aria-label="Filter op ernst">
+          <button type="button" data-filter="alle" aria-pressed="true">Alle <span class="count">${findings.length}</span></button>
+          <button type="button" data-filter="ernstig" aria-pressed="false">Ernstig <span class="count">${urgent}</span></button>
+          <button type="button" data-filter="middel" aria-pressed="false">Middel <span class="count">${counts.middel}</span></button>
+          <button type="button" data-filter="klein" aria-pressed="false">Laag <span class="count">${klein}</span></button>
+        </div>
+        <span class="toolbar__status" data-filter-status aria-live="polite">${findings.length} van ${findings.length} punten</span>
+        <button class="btn btn--ghost btn--sm" type="button" data-expand-all aria-pressed="false" data-label-open="Alles inklappen" data-label-closed="Alles openklappen">
+          <svg class="i i--xs" aria-hidden="true"><use href="#i-unfold"/></svg><span data-label>Alles openklappen</span>
+        </button>
+      </div>
+
+      <div class="card list" data-reveal>
+        <div class="list__head" aria-hidden="true"><span>#</span><span>Bevinding</span><span>Ernst</span><span></span></div>
+${findingHtml || '        <p class="lede" style="padding:20px">Geen bevindingen in deze scan.</p>'}
+      </div>
+    </div>
+  </section>
+
+${evidenceSection}
+
+  <section class="section" id="meer" aria-labelledby="meer-titel">
+    <div class="wrap wrap--narrow">
+      <header class="section__head section__head--center" data-reveal>
+        <p class="eyebrow">Achtergrond</p>
+        <h2 id="meer-titel">Wil je meer weten?</h2>
+        <p class="lede">Voor wie verder wil lezen. Klik een onderwerp open.</p>
+      </header>
+
+      <div class="accordion" data-stagger>
+        <details class="acc" id="goed">
+          <summary>
+            <span class="acc__icon acc__icon--ok"><svg class="i" aria-hidden="true"><use href="#i-shield-check"/></svg></span>
+            <span class="acc__title">Wat goed gaat<small>${(c.good || []).length} aanvallen die niet lukten</small></span>
+            <svg class="i chev" aria-hidden="true"><use href="#i-chev"/></svg>
+          </summary>
+          <div class="acc__body">
+            <ul class="checks">
+              ${goodHtml || '<li><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg><div><b>Geen bijzonderheden</b><span>Deze scan leverde geen expliciete afgeslagen aanvallen op.</span></div></li>'}
+            </ul>
+          </div>
+        </details>
+
+        <details class="acc" id="grenzen">
+          <summary>
+            <span class="acc__icon"><svg class="i" aria-hidden="true"><use href="#i-help"/></svg></span>
+            <span class="acc__title">Wat we niet hebben getest<small>Grenzen van dit onderzoek</small></span>
+            <svg class="i chev" aria-hidden="true"><use href="#i-chev"/></svg>
+          </summary>
+          <div class="acc__body">
+            <p>Dit was een ${scan.aggressive ? 'actieve test met toegestane wijzigingen op eigen testobjecten' : 'actieve test van buitenaf'}, in opdracht van de eigenaar van de site.</p>
+            <ul class="limits" style="margin-top:16px">
+              ${limitsHtml || '<li><svg class="i i--sm" aria-hidden="true"><use href="#i-key"/></svg><div><b>Beperkte dekking</b><span>Niet elk pad is getest.</span></div></li>'}
+            </ul>
+          </div>
+        </details>
+
+        <details class="acc" id="woorden">
+          <summary>
+            <span class="acc__icon"><svg class="i" aria-hidden="true"><use href="#i-book"/></svg></span>
+            <span class="acc__title">Woordenlijst<small>Vaktermen in gewone taal</small></span>
+            <svg class="i chev" aria-hidden="true"><use href="#i-chev"/></svg>
+          </summary>
+          <div class="acc__body">
+            <dl class="glossary">
+              <div id="woord-vermoedelijk"><dt>Bevestigd en vermoedelijk</dt><dd>Bevestigd: we hebben het zelf aangetoond. Vermoedelijk: een scanner meldt het, maar we konden het niet zelf herhalen.</dd></div>
+              ${glossHtml}
+            </dl>
+          </div>
+        </details>
+
+        <details class="acc" id="over">
+          <summary>
+            <span class="acc__icon"><svg class="i" aria-hidden="true"><use href="#i-file"/></svg></span>
+            <span class="acc__title">Over dit rapport<small>Werkwijze, privacy en gegevens van de scan</small></span>
+            <svg class="i chev" aria-hidden="true"><use href="#i-chev"/></svg>
+          </summary>
+          <div class="acc__body">
+            <p>De beoordelingen zijn inschattingen op basis van het verzamelde bewijs. Het rapport beschrijft de site op het moment van testen. Dat we iets niet vonden, betekent niet dat het er niet is.</p>
+            <p>Persoonsgegevens in het bewijs zijn ingekort om de privacy van klanten te beschermen.</p>
+            <dl class="facts">
+              <dt>Gemaakt met</dt><dd>hackmywebsite.ai${c.generatedBy === 'model' ? ` en ${esc(c.model || 'een AI-model')}` : ''}</dd>
+              <dt>Scan</dt><dd><code>${esc(scan.id)}</code></dd>
+              <dt>Datum</dt><dd>${esc(started)}${ended ? ' tot ' + esc(ended) : ''}</dd>
+              <dt>Doel</dt><dd>${esc(scan.url || '')}</dd>
+              <dt>Kosten van de scan</dt><dd>$${Number(scan.spentUsd || 0).toFixed(2)} van $${Number(scan.budgetUsd || 0).toFixed(2)}</dd>
+            </dl>
+          </div>
+        </details>
+      </div>
+    </div>
+  </section>
+
+  <section class="section section--white" aria-labelledby="cta-titel">
+    <div class="wrap">
+      <div class="cta" data-reveal>
+        <div>
+          <p class="eyebrow">Volgende stap</p>
+          <h2 id="cta-titel">${esc(c.next_title || 'Begin bij het eerste punt')}</h2>
+          <p>${withTerms(c.next_text || '')}</p>
+        </div>
+        <div class="cta__actions">
+          <a class="btn btn--accent btn--lg" href="#plan">Naar het stappenplan</a>
+          <button class="btn btn--light btn--lg" type="button" data-print>Bewaar als PDF</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<footer class="footer">
+  <div class="wrap footer__inner">
+    <span class="brand">
+      <span class="brand__mark"><svg class="i i--xs" aria-hidden="true"><use href="#i-shield"/></svg></span>
+      <span>hackmywebsite.ai<code>${esc(scan.id)}</code></span>
+    </span>
+    <ul class="footer__meta">
+      <li>${esc(started)}</li>
+      <li><a href="#over">Over dit rapport</a></li>
+      <li><a href="#top">Terug naar boven</a></li>
+    </ul>
+  </div>
+</footer>
+
+<script src="../../report-kit/hackmywebsite-report.js"></script>
+<script>
+  // counters animate from 0 in the browser; for print/PDF they must show the real number
+  (function () {
+    function freeze() {
+      document.querySelectorAll('[data-count]').forEach(function (el) {
+        var v = el.getAttribute('data-count');
+        if (v !== null) el.textContent = v;
+      });
+    }
+    window.addEventListener('load', function () { setTimeout(freeze, 300); });
+    window.addEventListener('beforeprint', freeze);
+    setTimeout(freeze, 1200);
+  })();
+</script>
+</body>
+</html>`;
+
+const out = path.join(dir, `rapport.${LANG}.src.html`);
+const localized = translateHtml(html, LANG).replace('<html lang="nl">', '<html lang="' + LANG + '">');
+if (localized.includes('[object Object]')) {
+  console.error('Refusing to write report: evidence contains an unserialized object. Check findings.json and content fields for object values.');
+  process.exit(1);
+}
+if (/<<span|&lt;span class="term"/.test(localized)) {
+  console.error('Refusing to write report: glossary markup is malformed. A term was inserted inside an HTML tag.');
+  process.exit(1);
+}
+fs.writeFileSync(out, localized, 'utf8');
+console.log(JSON.stringify({ src: out, lang: LANG, findings: findings.length, urgent, klein, terms: usedTermIds.size }, null, 2));

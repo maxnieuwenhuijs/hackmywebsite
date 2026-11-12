@@ -1,0 +1,10 @@
+# PixelDrop staging instance (localhost lab)
+User-agent: *
+Disallow: /api/
+Disallow: /download
+Disallow: /internal/
+Disallow: /secret/
+
+# Public share links are still readable by partners, so keep the list crawlable.
+Allow: /files
+Allow: /static/

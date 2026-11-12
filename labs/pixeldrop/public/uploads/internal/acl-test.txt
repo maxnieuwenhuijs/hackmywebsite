@@ -1,0 +1,7 @@
+ACL test drop
+=============
+
+This file belongs to the safety team and is used to test the download
+access-control list. Requests for this path are rejected with 403 on purpose.
+
+No credentials, no customer data, no flags live here.

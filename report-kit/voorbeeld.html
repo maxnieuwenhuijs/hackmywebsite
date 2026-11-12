@@ -1,0 +1,567 @@
+<!doctype html>
+<!--
+  VOORBEELDRAPPORT hackmywebsite.ai
+  ==========================
+  Een compleet, werkend rapport met verzonnen gegevens (webshop.example).
+  Gebruik dit bestand als sjabloon: kopieer het naar scans/<scan-id>/rapport.src.html,
+  zet de paden naar de kit op ../../report-kit/ en vervang de inhoud.
+  Alle regels voor tekst en beoordeling staan in report-kit/GIDS.md.
+
+  Bouwen tot Ã©Ã©n deelbaar bestand:
+    node report-kit/bundle.mjs scans/<scan-id>/rapport.src.html scans/<scan-id>/rapport.html
+
+  Opbouw (in deze volgorde, niets toevoegen, liever iets weglaten):
+    1 Bovenbalk      merk, navigatie, thema, afdrukken
+    2 Kop            eindoordeel in Ã©Ã©n zin, twee knoppen
+    3 Overzicht      Ã©Ã©n melding (alleen bij kritiek of hoog), drie cijfers, ernstbalk
+    4 Risicokaart    wordt door de kit gebouwd uit de bevindingen
+    5 Stappenplan    bevindingen samengevoegd tot klussen: vandaag, deze week, deze maand
+    6 Bevindingen    ingeklapte regels; uitleg in gewone taal; bewijs nog een keer ingeklapt
+    7 Achtergrond    wat goed ging, grenzen, woordenlijst, over het rapport (alles ingeklapt)
+    8 Volgende stap  donker blok met de eerste klus
+-->
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Beveiligingsrapport webshop.example</title>
+<meta name="robots" content="noindex,nofollow">
+<meta name="description" content="Voorbeeld van een hackmywebsite.ai-rapport in gewone taal.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500;600&amp;display=swap">
+<script>
+  (function () {
+    var d = document.documentElement;
+    d.classList.add('js');
+    try { var t = localStorage.getItem('vs-theme'); if (t) d.dataset.theme = t; } catch (e) {}
+    // safety net: if the kit never boots, show the content without motion
+    setTimeout(function () { if (!window.vsReady) d.classList.remove('js'); }, 2500);
+  })();
+</script>
+<!-- in een scanmap: ../../report-kit/hackmywebsite-report.css -->
+<link rel="stylesheet" href="hackmywebsite-report.css">
+</head>
+<body>
+
+<!-- Iconen: Ã©Ã©n sprite, gebruik met <svg class="i"><use href="#i-naam"/></svg> -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+  <defs>
+    <symbol id="i-shield" viewBox="0 0 24 24"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/></symbol>
+    <symbol id="i-shield-check" viewBox="0 0 24 24"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><path d="m9 12 2 2 4-4"/></symbol>
+    <symbol id="i-shield-alert" viewBox="0 0 24 24"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><path d="M12 8v4"/><path d="M12 16h.01"/></symbol>
+    <symbol id="i-alert" viewBox="0 0 24 24"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></symbol>
+    <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></symbol>
+    <symbol id="i-arrow-up" viewBox="0 0 24 24"><path d="m5 12 7-7 7 7"/><path d="M12 19V5"/></symbol>
+    <symbol id="i-chev" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></symbol>
+    <symbol id="i-eye" viewBox="0 0 24 24"><path d="M2.06 12.35a1 1 0 0 1 0-.7 10.75 10.75 0 0 1 19.88 0 1 1 0 0 1 0 .7 10.75 10.75 0 0 1-19.88 0"/><circle cx="12" cy="12" r="3"/></symbol>
+    <symbol id="i-wrench" viewBox="0 0 24 24"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></symbol>
+    <symbol id="i-code" viewBox="0 0 24 24"><path d="m16 18 6-6-6-6"/><path d="m8 6-6 6 6 6"/></symbol>
+    <symbol id="i-lock" viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></symbol>
+    <symbol id="i-key" viewBox="0 0 24 24"><path d="m15.5 7.5 2.3 2.3a1 1 0 0 0 1.4 0l2.1-2.1a1 1 0 0 0 0-1.4L19 4"/><path d="m21 2-9.6 9.6"/><circle cx="7.5" cy="15.5" r="5.5"/></symbol>
+    <symbol id="i-help" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><path d="M12 17h.01"/></symbol>
+    <symbol id="i-compass" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="m16.24 7.76-1.8 5.41a2 2 0 0 1-1.27 1.27L7.76 16.24l1.8-5.41a2 2 0 0 1 1.27-1.27z"/></symbol>
+    <symbol id="i-book" viewBox="0 0 24 24"><path d="M12 7v14"/><path d="M3 18a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h5a4 4 0 0 1 4 4 4 4 0 0 1 4-4h5a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1h-6a3 3 0 0 0-3 3 3 3 0 0 0-3-3z"/></symbol>
+    <symbol id="i-target" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></symbol>
+    <symbol id="i-list" viewBox="0 0 24 24"><path d="m3 17 2 2 4-4"/><path d="m3 7 2 2 4-4"/><path d="M13 6h8"/><path d="M13 12h8"/><path d="M13 18h8"/></symbol>
+    <symbol id="i-zap" viewBox="0 0 24 24"><path d="M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z"/></symbol>
+    <symbol id="i-calendar" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4"/><path d="M8 2v4"/><path d="M3 10h18"/></symbol>
+    <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></symbol>
+    <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/></symbol>
+    <symbol id="i-moon" viewBox="0 0 24 24"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></symbol>
+    <symbol id="i-printer" viewBox="0 0 24 24"><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><path d="M6 9V3a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v6"/><rect x="6" y="14" width="12" height="8" rx="1"/></symbol>
+    <symbol id="i-menu" viewBox="0 0 24 24"><path d="M4 6h16"/><path d="M4 12h16"/><path d="M4 18h10"/></symbol>
+    <symbol id="i-copy" viewBox="0 0 24 24"><rect x="8" y="8" width="14" height="14" rx="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></symbol>
+    <symbol id="i-globe" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/><path d="M2 12h20"/></symbol>
+    <symbol id="i-file" viewBox="0 0 24 24"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/></symbol>
+    <symbol id="i-scan" viewBox="0 0 24 24"><path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/><circle cx="12" cy="12" r="3"/></symbol>
+    <symbol id="i-lightbulb" viewBox="0 0 24 24"><path d="M15 14c.2-1 .7-1.7 1.5-2.5 1-.9 1.5-2.2 1.5-3.5A6 6 0 0 0 6 8c0 1 .2 2.2 1.5 3.5.7.7 1.3 1.5 1.5 2.5"/><path d="M9 18h6"/><path d="M10 22h4"/></symbol>
+    <symbol id="i-flag" viewBox="0 0 24 24"><path d="M4 15s1-1 4-1 3 2 6 2 4-1 4-1V3s-1 1-4 1-3-2-6-2-4 1-4 1z"/><path d="M4 22v-7"/></symbol>
+    <symbol id="i-unfold" viewBox="0 0 24 24"><path d="m7 15 5 5 5-5"/><path d="m7 9 5-5 5 5"/></symbol>
+  </defs>
+</svg>
+
+<a class="skip" href="#inhoud">Naar de inhoud</a>
+
+<!-- 1 BOVENBALK ============================================================ -->
+<header class="topbar">
+  <div class="wrap topbar__inner">
+    <a class="brand" href="#top" aria-label="hackmywebsite.ai, beveiligingsrapport webshop.example, naar boven">
+      <span class="brand__mark"><svg class="i i--sm" aria-hidden="true"><use href="#i-shield"/></svg></span>
+      <span>hackmywebsite.ai<span class="brand__slash" aria-hidden="true">/</span><span class="brand__site">webshop.example</span></span>
+    </a>
+    <nav class="topnav" aria-label="Onderdelen">
+      <a href="#overzicht">Overzicht</a>
+      <a href="#kaart">Risicokaart</a>
+      <a href="#plan">Stappenplan</a>
+      <a href="#bevindingen">Bevindingen</a>
+      <a href="#meer">Achtergrond</a>
+    </nav>
+    <div class="topbar__actions">
+      <button class="btn btn--ghost btn--icon" type="button" data-theme-toggle aria-label="Donker thema">
+        <svg class="i icon-moon" aria-hidden="true"><use href="#i-moon"/></svg>
+        <svg class="i icon-sun" aria-hidden="true"><use href="#i-sun"/></svg>
+      </button>
+      <button class="btn btn--primary" type="button" data-print aria-label="Afdrukken of bewaren als PDF">
+        <svg class="i i--sm" aria-hidden="true"><use href="#i-printer"/></svg><span class="btn__text">Afdrukken</span>
+      </button>
+    </div>
+  </div>
+  <span class="topbar__progress" data-progress aria-hidden="true"></span>
+</header>
+
+<!-- 2 KOP: het eindoordeel in maximaal acht woorden, de uitleg in drie korte zinnen -->
+<section class="hero" id="top" aria-labelledby="titel">
+  <div class="wrap hero__inner">
+    <p class="eyebrow" data-enter style="--i:0">Beveiligingsrapport &middot; 1 januari 2027</p>
+    <h1 id="titel" data-enter style="--i:1">Bestellingen van klanten liggen open</h1>
+    <p class="hero__lede" data-enter style="--i:2">We testten webshop.example zoals een aanvaller dat doet: van buitenaf en zonder inlog. Wie een bestelnummer raadt, ziet naam en adres van een klant. EÃ©n reparatie lost dat op.</p>
+    <div class="hero__actions" data-enter style="--i:3">
+      <a class="btn btn--primary btn--lg" href="#plan">Wat moet eerst?<svg class="i i--sm go" aria-hidden="true"><use href="#i-arrow"/></svg></a>
+      <a class="btn btn--secondary btn--lg" href="#bevindingen">Alle 3 bevindingen</a>
+    </div>
+    <ul class="hero__meta" data-enter style="--i:4">
+      <li><svg class="i i--xs" aria-hidden="true"><use href="#i-globe"/></svg>webshop.example</li>
+      <li><svg class="i i--xs" aria-hidden="true"><use href="#i-clock"/></svg>10:00 tot 10:40</li>
+      <li><svg class="i i--xs" aria-hidden="true"><use href="#i-scan"/></svg>Actief, van buitenaf</li>
+    </ul>
+  </div>
+</section>
+
+<main id="inhoud">
+
+  <!-- 3 OVERZICHT ========================================================== -->
+  <section class="section" id="overzicht" aria-labelledby="overzicht-titel">
+    <div class="wrap">
+      <header class="section__head" data-reveal>
+        <p class="eyebrow">Overzicht</p>
+        <h2 id="overzicht-titel">Zo staat het ervoor</h2>
+      </header>
+
+      <!-- Alleen tonen als er een kritiek of hoog punt is. data-open = nummer van dat punt. -->
+      <div class="alert" data-reveal>
+        <span class="alert__icon"><svg class="i" aria-hidden="true"><use href="#i-alert"/></svg></span>
+        <div class="alert__body">
+          <p class="alert__title">Direct actie nodig: klantgegevens liggen open</p>
+          <p>Iedereen kan naam, adres en bestelling van klanten opvragen door een nummer te veranderen.</p>
+        </div>
+        <button class="btn btn--danger btn--sm" type="button" data-open="1">Bekijk punt 1<svg class="i i--xs go" aria-hidden="true"><use href="#i-arrow"/></svg></button>
+      </div>
+
+      <div class="stats" data-stagger>
+        <div class="card stat stat--wide">
+          <p class="stat__label"><svg class="i i--xs" aria-hidden="true"><use href="#i-shield-alert"/></svg>Bevindingen</p>
+          <div class="stat__row">
+            <p class="stat__value" data-count="3">3</p>
+            <p class="stat__note">verdeeld naar ernst</p>
+          </div>
+          <!-- --n = aantal per ernst. Ernst zonder punten weglaten, zowel in de balk als in de legenda. -->
+          <figure class="sevbar">
+            <div class="sevbar__track" aria-hidden="true">
+              <span class="sevbar__seg" data-sev="kritiek" style="--n:1;--i:0"></span>
+              <span class="sevbar__seg" data-sev="middel" style="--n:1;--i:1"></span>
+              <span class="sevbar__seg" data-sev="laag" style="--n:1;--i:2"></span>
+            </div>
+            <ul class="sevbar__legend">
+              <li data-sev="kritiek"><b>1</b> kritiek</li>
+              <li data-sev="middel"><b>1</b> middel</li>
+              <li data-sev="laag"><b>1</b> laag</li>
+            </ul>
+          </figure>
+        </div>
+        <div class="card stat">
+          <p class="stat__label"><svg class="i i--xs" aria-hidden="true"><use href="#i-zap"/></svg>Vandaag oplossen</p>
+          <p class="stat__value" data-count="1">1</p>
+          <p class="stat__note">punt is kritiek of hoog</p>
+        </div>
+        <div class="card stat">
+          <p class="stat__label"><svg class="i i--xs" aria-hidden="true"><use href="#i-shield-check"/></svg>Afgeslagen</p>
+          <p class="stat__value" data-count="3">3</p>
+          <p class="stat__note">soorten aanvallen lukten niet</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 4 RISICOKAART: de kit bouwt het raster en de knoppen uit de bevindingen hieronder.
+       Alleen de tekst van het eerste punt in het zijpaneel staat hier vast (voor zonder JavaScript). -->
+  <section class="section section--white" id="kaart" aria-labelledby="kaart-titel">
+    <div class="wrap">
+      <header class="section__head" data-reveal>
+        <p class="eyebrow">Risicokaart</p>
+        <h2 id="kaart-titel">Rechtsboven is het gevaarlijkst</h2>
+        <p class="lede">Hoe hoger een punt staat, hoe groter de schade. Hoe verder naar rechts, hoe makkelijker het te misbruiken is. Wijs een nummer aan voor uitleg.</p>
+      </header>
+
+      <div class="card matrix" data-matrix data-reveal
+           data-y-labels="Klein|Beperkt|Merkbaar|Groot|Zeer groot"
+           data-x-labels="Zeer lastig|Lastig|Gemiddeld|Makkelijk|Heel makkelijk">
+        <figure class="matrix__chart">
+          <p class="axis axis--y" aria-hidden="true"><svg class="i i--xs" aria-hidden="true"><use href="#i-arrow-up"/></svg>Schade</p>
+          <div class="matrix__grid" role="group" aria-label="Risicokaart: drie punten op schade en gemak van misbruik"></div>
+          <p class="axis axis--x" aria-hidden="true">Gemak van misbruik<svg class="i i--xs" aria-hidden="true"><use href="#i-arrow"/></svg></p>
+          <figcaption class="matrix__legend">
+            <ul class="legend" aria-label="Zones">
+              <li><span class="legend__zone" style="--z:var(--zone-4)"></span>Direct oplossen</li>
+              <li><span class="legend__zone" style="--z:var(--zone-3)"></span>Snel</li>
+              <li><span class="legend__zone" style="--z:var(--zone-2)"></span>Inplannen</li>
+              <li><span class="legend__zone" style="--z:var(--zone-1)"></span>Rustig</li>
+            </ul>
+            <ul class="legend" aria-label="Symbolen">
+              <li><span class="legend__marker"></span>Bevestigd</li>
+              <li><span class="legend__marker legend__marker--suspected"></span>Vermoedelijk</li>
+            </ul>
+          </figcaption>
+          <noscript><p class="lede">De kaart heeft JavaScript nodig. Alle punten staan ook bij de bevindingen.</p></noscript>
+        </figure>
+
+        <aside class="inspector" data-preview aria-live="polite" aria-label="Uitleg bij het gekozen punt">
+          <div class="inspector__body">
+            <p class="inspector__label">Punt <span data-slot="num">01</span></p>
+            <div class="inspector__badges">
+              <span class="chip" data-slot="sev" data-sev="kritiek">Kritiek</span>
+              <span class="inspector__status" data-slot="status">Bevestigd met eigen test</span>
+            </div>
+            <h3 data-slot="title">Bestellingen van andere klanten zijn op te vragen</h3>
+            <p data-slot="lede"></p>
+            <code class="where" data-slot="where">/api/orders/{nummer}</code>
+            <div class="inspector__meters">
+              <div class="meter" data-slot="ease" data-value="5"><span>Makkelijk te misbruiken</span><b>5 van 5</b></div>
+              <div class="meter" data-slot="impact" data-value="5"><span>Schade</span><b>5 van 5</b></div>
+            </div>
+            <button class="btn btn--secondary btn--block" type="button" data-slot="open" data-open="1">Lees alles<svg class="i i--sm go" aria-hidden="true"><use href="#i-arrow"/></svg></button>
+          </div>
+        </aside>
+      </div>
+
+      <details class="note" data-reveal>
+        <summary>Hoe beoordelen we?<svg class="i chev" aria-hidden="true"><use href="#i-chev"/></svg></summary>
+        <p>De schade volgt uit de ernst van het punt. Het gemak van misbruik volgt uit het soort probleem en of er inloggegevens nodig waren. Dit zijn inschattingen op basis van het bewijs. Een <span class="term" data-term="vermoedelijk">vermoedelijk</span> punt zetten we een stap lager.</p>
+      </details>
+    </div>
+  </section>
+
+  <!-- 5 STAPPENPLAN: altijd drie kolommen. Een lege kolom krijgt een korte tekst ("Niets nodig"). -->
+  <section class="section" id="plan" aria-labelledby="plan-titel">
+    <div class="wrap">
+      <header class="section__head" data-reveal>
+        <p class="eyebrow">Stappenplan</p>
+        <h2 id="plan-titel">Drie klussen, op volgorde</h2>
+        <p class="lede">Begin links. Klik op een nummer om dat punt te lezen.</p>
+      </header>
+
+      <ol class="phases" data-stagger>
+        <li class="card phase">
+          <div class="phase__head">
+            <span class="phase__num" aria-hidden="true">1</span>
+            <div><h3>Vandaag</h3><p>Kritiek en hoog</p></div>
+          </div>
+          <ul class="tasks">
+            <!-- Klus: titel is een opdracht (werkwoord vooraan), tekst maximaal twee zinnen. -->
+            <li class="task">
+              <p class="task__title"><span class="task__letter" aria-hidden="true">A</span>Laat elke bestelling alleen aan de eigenaar zien</p>
+              <p class="task__text">Controleer bij elk verzoek of de bestelling bij de ingelogde klant hoort.</p>
+              <p class="task__meta">Lost op
+                <button class="ref" type="button" data-open="1" aria-label="Bekijk punt 1">1</button>
+                <span class="task__effort">Moeite: klein</span>
+              </p>
+            </li>
+          </ul>
+        </li>
+        <li class="card phase">
+          <div class="phase__head">
+            <span class="phase__num" aria-hidden="true">2</span>
+            <div><h3>Deze week</h3><p>Middel</p></div>
+          </div>
+          <ul class="tasks">
+            <li class="task">
+              <p class="task__title"><span class="task__letter" aria-hidden="true">B</span>Rem het inloggen af na foute pogingen</p>
+              <p class="task__text">Na vijf foute wachtwoorden een korte pauze, per account en per IP-adres.</p>
+              <p class="task__meta">Lost op
+                <button class="ref" type="button" data-open="2" aria-label="Bekijk punt 2">2</button>
+                <span class="task__effort">Moeite: middel</span>
+              </p>
+            </li>
+          </ul>
+        </li>
+        <li class="card phase">
+          <div class="phase__head">
+            <span class="phase__num" aria-hidden="true">3</span>
+            <div><h3>Deze maand</h3><p>Laag en ter info</p></div>
+          </div>
+          <ul class="tasks">
+            <li class="task">
+              <p class="task__title"><span class="task__letter" aria-hidden="true">C</span>Zet oude versleuteling uit</p>
+              <p class="task__text">Sta alleen <span class="term" data-term="tls">TLS</span> 1.2 en 1.3 toe.</p>
+              <p class="task__meta">Lost op
+                <button class="ref" type="button" data-open="3" aria-label="Bekijk punt 3">3</button>
+                <span class="task__effort">Moeite: klein</span>
+              </p>
+            </li>
+          </ul>
+        </li>
+      </ol>
+
+      <!-- Alleen bij gelekte persoonsgegevens: wijs op de meldplicht. -->
+      <p class="callout callout--warn" data-reveal>
+        <svg class="i" aria-hidden="true"><use href="#i-alert"/></svg>
+        <span><strong>Na klus A:</strong> kijk in je logs of anderen bestellingen van andere klanten hebben opgevraagd. Zo ja, dan is er sprake van een datalek dat je mogelijk binnen 72 uur moet melden bij de Autoriteit Persoonsgegevens.</span>
+      </p>
+    </div>
+  </section>
+
+  <!-- 6 BEVINDINGEN ======================================================== -->
+  <section class="section section--white" id="bevindingen" aria-labelledby="bevindingen-titel">
+    <div class="wrap">
+      <header class="section__head" data-reveal>
+        <p class="eyebrow">Bevindingen</p>
+        <h2 id="bevindingen-titel">Drie punten, kort uitgelegd</h2>
+        <p class="lede">Klik op een punt voor de uitleg in gewone taal. Het technische bewijs zit daaronder, voor je ontwikkelaar. Woorden met een <span class="term" data-term="stippellijn">stippellijn</span> kun je aanwijzen.</p>
+      </header>
+
+      <!-- De aantallen vult de kit zelf in. -->
+      <div class="toolbar" data-reveal>
+        <div class="segmented" role="group" aria-label="Filter op ernst">
+          <button type="button" data-filter="alle" aria-pressed="true">Alle <span class="count">3</span></button>
+          <button type="button" data-filter="ernstig" aria-pressed="false">Ernstig <span class="count">1</span></button>
+          <button type="button" data-filter="middel" aria-pressed="false">Middel <span class="count">1</span></button>
+          <button type="button" data-filter="klein" aria-pressed="false">Laag <span class="count">1</span></button>
+        </div>
+        <span class="toolbar__status" data-filter-status aria-live="polite">3 van 3 punten</span>
+        <button class="btn btn--ghost btn--sm" type="button" data-expand-all aria-pressed="false" data-label-open="Alles inklappen" data-label-closed="Alles openklappen">
+          <svg class="i i--xs" aria-hidden="true"><use href="#i-unfold"/></svg><span data-label>Alles openklappen</span>
+        </button>
+      </div>
+
+      <div class="card list" data-reveal>
+        <div class="list__head" aria-hidden="true"><span>#</span><span>Bevinding</span><span>Ernst</span><span></span></div>
+
+        <!-- EEN BEVINDING
+             data-n       volgnummer, gesorteerd op urgentie (1 = eerst oplossen)
+             data-ease    gemak van misbruik 1-5, data-impact schade 1-5 (zie GIDS.md)
+             data-sev     kritiek | hoog | middel | laag | info
+             data-status  bevestigd | vermoedelijk
+             [data-lede]  het antwoord op "Wat is er aan de hand?"; ook de tekst in het zijpaneel -->
+        <details class="finding" id="punt-1" data-finding data-n="1" data-ease="5" data-impact="5" data-sev="kritiek" data-status="bevestigd">
+          <summary class="finding__row">
+            <span class="finding__num">01</span>
+            <span class="finding__main"><span class="finding__title">Bestellingen van andere klanten zijn op te vragen</span><code class="where">/api/orders/{nummer}</code></span>
+            <span class="chip" data-sev="kritiek">Kritiek</span>
+            <svg class="i chev" aria-hidden="true"><use href="#i-chev"/></svg>
+          </summary>
+          <div class="finding__body">
+            <dl class="qa">
+              <div><dt><svg class="i i--sm" aria-hidden="true"><use href="#i-eye"/></svg>Wat is er aan de hand?</dt><dd data-lede>Elke bestelling heeft een volgnummer. Wie in de link het nummer met Ã©Ã©n verhoogt, ziet de bestelling van een andere klant: naam, adres en wat er gekocht is.</dd></div>
+              <div class="qa__risk"><dt><svg class="i i--sm" aria-hidden="true"><use href="#i-alert"/></svg>Wat kan er misgaan?</dt><dd>Iemand loopt in een paar minuten alle bestellingen langs en heeft dan je hele klantenbestand. Het gaat om <span class="term" data-term="persoonsgegevens">persoonsgegevens</span>, dus de AVG is van toepassing.</dd></div>
+              <div class="qa__fix"><dt><svg class="i i--sm" aria-hidden="true"><use href="#i-wrench"/></svg>Wat moet er gebeuren?</dt><dd>Laat de server bij elke bestelling controleren of die bij de ingelogde klant hoort. Test het met twee testaccounts: account B mag de bestelling van A niet zien.</dd></div>
+            </dl>
+            <div class="finding__meta">
+              <div class="meter" data-value="5"><span>Makkelijk te misbruiken</span><b>5 van 5</b></div>
+              <div class="meter" data-value="5"><span>Schade</span><b>5 van 5</b></div>
+              <span class="status"><svg class="i i--xs" aria-hidden="true"><use href="#i-check"/></svg>Bevestigd</span>
+            </div>
+            <details class="techbox">
+              <summary><svg class="i i--xs" aria-hidden="true"><use href="#i-code"/></svg>Technisch bewijs<svg class="i chev" aria-hidden="true"><use href="#i-chev"/></svg></summary>
+              <div class="tech">
+                <!-- Code in <pre class="code"> binnen .code-wrap (krijgt een kopieerknop).
+                     Kleuren: c-bad (fout), c-ok (goed), c-key (gemaskeerde waarde), c-mute (toelichting). -->
+                <div><h5>Verzoek</h5><div class="code-wrap"><pre class="code">curl -s https://webshop.example/api/orders/10042</pre></div></div>
+                <div><h5>Antwoord van de server</h5><div class="code-wrap"><pre class="code"><span class="c-bad">HTTP/1.1 200 OK</span>  application/json
+<span class="c-mute"># verzoek zonder cookie</span>
+{"id":10042,"name":"<span class="c-key">J*** de V***</span>","email":"<span class="c-key">jd***@example.com</span>",
+ "street":"<span class="c-key">***</span>","items":[...]}</pre></div></div>
+                <div class="tech__cols">
+                  <div><h5>Oorzaak</h5><p>De route zoekt de bestelling op id, zonder te controleren wie de eigenaar is.</p></div>
+                  <div><h5>Technische oplossing</h5><p>Voeg <code>where: { id, customerId: session.user.id }</code> toe aan de query en geef 404 terug als er niets is.</p></div>
+                </div>
+                <p class="tech__note">Beoordeling: schade 5 van 5 door de ernst kritiek. Misbruik 5 van 5, want het gaat om toegangscontrole en er waren geen inloggegevens nodig.</p>
+              </div>
+            </details>
+          </div>
+        </details>
+
+        <details class="finding" id="punt-2" data-finding data-n="2" data-ease="4" data-impact="3" data-sev="middel" data-status="bevestigd">
+          <summary class="finding__row">
+            <span class="finding__num">02</span>
+            <span class="finding__main"><span class="finding__title">Wachtwoorden zijn eindeloos te proberen</span><code class="where">/login</code></span>
+            <span class="chip" data-sev="middel">Middel</span>
+            <svg class="i chev" aria-hidden="true"><use href="#i-chev"/></svg>
+          </summary>
+          <div class="finding__body">
+            <dl class="qa">
+              <div><dt><svg class="i i--sm" aria-hidden="true"><use href="#i-eye"/></svg>Wat is er aan de hand?</dt><dd data-lede>Het inlogscherm blijft wachtwoorden accepteren, hoe vaak iemand het ook fout doet. Er is geen <span class="term" data-term="rate-limit">limiet op verzoeken</span>.</dd></div>
+              <div class="qa__risk"><dt><svg class="i i--sm" aria-hidden="true"><use href="#i-alert"/></svg>Wat kan er misgaan?</dt><dd>Een programma probeert duizenden veelgebruikte wachtwoorden per uur. Klanten met een zwak wachtwoord raken hun account kwijt.</dd></div>
+              <div class="qa__fix"><dt><svg class="i i--sm" aria-hidden="true"><use href="#i-wrench"/></svg>Wat moet er gebeuren?</dt><dd>Laat na vijf foute pogingen een korte pauze volgen, per account en per IP-adres.</dd></div>
+            </dl>
+            <div class="finding__meta">
+              <div class="meter" data-value="4"><span>Makkelijk te misbruiken</span><b>4 van 5</b></div>
+              <div class="meter" data-value="3"><span>Schade</span><b>3 van 5</b></div>
+              <span class="status"><svg class="i i--xs" aria-hidden="true"><use href="#i-check"/></svg>Bevestigd</span>
+            </div>
+            <details class="techbox">
+              <summary><svg class="i i--xs" aria-hidden="true"><use href="#i-code"/></svg>Technisch bewijs<svg class="i chev" aria-hidden="true"><use href="#i-chev"/></svg></summary>
+              <div class="tech">
+                <div><h5>Verzoek</h5><div class="code-wrap"><pre class="code">50 x POST https://webshop.example/login  {"email":"test@example.com","password":"fout-1..50"}</pre></div></div>
+                <div><h5>Antwoord van de server</h5><div class="code-wrap"><pre class="code">50 x <span class="c-bad">HTTP/1.1 401</span>  binnen 9 seconden, geen 429 en geen vertraging</pre></div></div>
+                <div class="tech__cols">
+                  <div><h5>Oorzaak</h5><p>De loginroute heeft geen rate limiting.</p></div>
+                  <div><h5>Technische oplossing</h5><p>Voeg een limiet toe (bijvoorbeeld 5 per 15 minuten per account en per IP) en antwoord daarna met 429.</p></div>
+                </div>
+                <p class="tech__note">Beoordeling: schade 3 van 5 door de ernst middel. Misbruik 4 van 5, want het vraagt een script maar geen inloggegevens.</p>
+              </div>
+            </details>
+          </div>
+        </details>
+
+        <!-- Een vermoedelijk punt: status--suspected, en in de tekst eerlijk zeggen dat het niet zelf is bevestigd. -->
+        <details class="finding" id="punt-3" data-finding data-n="3" data-ease="4" data-impact="2" data-sev="laag" data-status="vermoedelijk">
+          <summary class="finding__row">
+            <span class="finding__num">03</span>
+            <span class="finding__main"><span class="finding__title">Oude versleuteling staat mogelijk nog aan</span><code class="where">webshop.example:443</code></span>
+            <span class="chip" data-sev="laag">Laag</span>
+            <svg class="i chev" aria-hidden="true"><use href="#i-chev"/></svg>
+          </summary>
+          <div class="finding__body">
+            <dl class="qa">
+              <div><dt><svg class="i i--sm" aria-hidden="true"><use href="#i-eye"/></svg>Wat is er aan de hand?</dt><dd data-lede>Een scanner meldt dat je site nog <span class="term" data-term="tls">TLS</span> 1.0 en 1.1 accepteert. We konden dat zelf niet herhalen.</dd></div>
+              <div class="qa__risk"><dt><svg class="i i--sm" aria-hidden="true"><use href="#i-alert"/></svg>Wat kan er misgaan?</dt><dd>Weinig in de praktijk, want moderne browsers gebruiken deze versies niet meer. Wel kan het je een onvoldoende geven bij een audit.</dd></div>
+              <div class="qa__fix"><dt><svg class="i i--sm" aria-hidden="true"><use href="#i-wrench"/></svg>Wat moet er gebeuren?</dt><dd>Zet de minimale TLS-versie op 1.2 bij je hostingpartij of CDN.</dd></div>
+            </dl>
+            <div class="finding__meta">
+              <div class="meter" data-value="4"><span>Makkelijk te misbruiken</span><b>4 van 5</b></div>
+              <div class="meter" data-value="2"><span>Schade</span><b>2 van 5</b></div>
+              <span class="status status--suspected"><svg class="i i--xs" aria-hidden="true"><use href="#i-help"/></svg>Vermoedelijk</span>
+            </div>
+            <details class="techbox">
+              <summary><svg class="i i--xs" aria-hidden="true"><use href="#i-code"/></svg>Technisch bewijs<svg class="i chev" aria-hidden="true"><use href="#i-chev"/></svg></summary>
+              <div class="tech">
+                <div><h5>Verzoek</h5><div class="code-wrap"><pre class="code">nuclei -u https://webshop.example -t ssl/deprecated-tls.yaml</pre></div></div>
+                <div><h5>Antwoord van de scanner</h5><div class="code-wrap"><pre class="code">[deprecated-tls] [ssl] [low] webshop.example:443 [tls10, tls11]
+<span class="c-mute"># eigen controle met openssl s_client -tls1_1 lukte niet vanaf de testcomputer</span></pre></div></div>
+                <p class="tech__note">Beoordeling: schade 2 van 5 door de ernst laag. Misbruik 4 van 5: een instelling, zonder inlog te zien, en een stap lager omdat het vermoedelijk is.</p>
+              </div>
+            </details>
+          </div>
+        </details>
+      </div>
+    </div>
+  </section>
+
+  <!-- 7 ACHTERGROND: alles ingeklapt. De ids goed, grenzen, woorden en over zijn vast. -->
+  <section class="section" id="meer" aria-labelledby="meer-titel">
+    <div class="wrap wrap--narrow">
+      <header class="section__head section__head--center" data-reveal>
+        <p class="eyebrow">Achtergrond</p>
+        <h2 id="meer-titel">Wil je meer weten?</h2>
+        <p class="lede">Voor wie verder wil lezen. Klik een onderwerp open.</p>
+      </header>
+
+      <div class="accordion" data-stagger>
+        <details class="acc" id="goed">
+          <summary>
+            <span class="acc__icon acc__icon--ok"><svg class="i" aria-hidden="true"><use href="#i-shield-check"/></svg></span>
+            <span class="acc__title">Wat goed gaat<small>3 aanvallen die niet lukten</small></span>
+            <svg class="i chev" aria-hidden="true"><use href="#i-chev"/></svg>
+          </summary>
+          <div class="acc__body">
+            <!-- Per poging: wat het betekent in gewone taal, met het bewijs in mono eronder. -->
+            <ul class="checks">
+              <li><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg><div><b>Geheime bestanden zijn niet te vinden</b><span>Instellingen en back-ups staan niet open op internet.</span><code>/.env, /.git/config, /backup.zip: 404</code></div></li>
+              <li><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg><div><b>Beheer vraagt om inloggen</b><span>Alle beheerfuncties weigeren bezoekers die niet zijn ingelogd.</span><code>/api/admin/*: 401</code></div></li>
+              <li><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg><div><b>Geen SQL-injectie</b><span>Invoer wordt gecontroleerd voordat hij de database bereikt.</span><code>/search?q=' OR 1=1--: 400</code></div></li>
+            </ul>
+          </div>
+        </details>
+
+        <details class="acc" id="grenzen">
+          <summary>
+            <span class="acc__icon"><svg class="i" aria-hidden="true"><use href="#i-help"/></svg></span>
+            <span class="acc__title">Wat we niet hebben getest<small>Grenzen van dit onderzoek</small></span>
+            <svg class="i chev" aria-hidden="true"><use href="#i-chev"/></svg>
+          </summary>
+          <div class="acc__body">
+            <p>Dit was een actieve test van buitenaf, in opdracht van de eigenaar van de site. Er is alleen gelezen, niets gewijzigd.</p>
+            <ul class="limits" style="margin-top:16px">
+              <li><svg class="i i--sm" aria-hidden="true"><use href="#i-key"/></svg><div><b>We hadden geen beheerdersaccount</b><span>Wat er gebeurt na het inloggen als beheerder is niet getest.</span></div></li>
+              <li><svg class="i i--sm" aria-hidden="true"><use href="#i-lock"/></svg><div><b>We hebben niets gewijzigd</b><span>Bestellingen en accounts zijn alleen bekeken, nooit aangepast.</span></div></li>
+            </ul>
+          </div>
+        </details>
+
+        <!-- Elke data-term in het rapport heeft hier een item met id="woord-<term>". -->
+        <details class="acc" id="woorden">
+          <summary>
+            <span class="acc__icon"><svg class="i" aria-hidden="true"><use href="#i-book"/></svg></span>
+            <span class="acc__title">Woordenlijst<small>Vaktermen in gewone taal</small></span>
+            <svg class="i chev" aria-hidden="true"><use href="#i-chev"/></svg>
+          </summary>
+          <div class="acc__body">
+            <dl class="glossary">
+              <div id="woord-vermoedelijk"><dt>Bevestigd en vermoedelijk</dt><dd>Bevestigd: we hebben het zelf aangetoond. Vermoedelijk: een scanner meldt het, maar we konden het niet zelf herhalen.</dd></div>
+              <div id="woord-rate-limit"><dt>Limiet op verzoeken (rate limit)</dt><dd>Een grens aan het aantal verzoeken dat iemand per minuut mag doen. Dat maakt misbruik op grote schaal lastig.</dd></div>
+              <div id="woord-persoonsgegevens"><dt>Persoonsgegevens</dt><dd>Informatie over een herkenbaar persoon, zoals een naam of e-mailadres. De AVG stelt strenge eisen aan hoe je die beschermt.</dd></div>
+              <div id="woord-stippellijn"><dt>Stippellijn</dt><dd>Zo herken je een vakterm in dit rapport. Wijs hem aan of tik erop en de uitleg verschijnt.</dd></div>
+              <div id="woord-tls"><dt>TLS</dt><dd>De versleuteling tussen de browser en je site, het slotje in de adresbalk. Versie 1.2 en 1.3 zijn veilig, 1.0 en 1.1 zijn verouderd.</dd></div>
+            </dl>
+          </div>
+        </details>
+
+        <details class="acc" id="over">
+          <summary>
+            <span class="acc__icon"><svg class="i" aria-hidden="true"><use href="#i-file"/></svg></span>
+            <span class="acc__title">Over dit rapport<small>Werkwijze, privacy en gegevens van de scan</small></span>
+            <svg class="i chev" aria-hidden="true"><use href="#i-chev"/></svg>
+          </summary>
+          <div class="acc__body">
+            <p>De beoordelingen zijn inschattingen op basis van het verzamelde bewijs. Het rapport beschrijft de site op het moment van testen. Dat we iets niet vonden, betekent niet dat het er niet is.</p>
+            <p>Persoonsgegevens in het bewijs zijn ingekort om de privacy van klanten te beschermen.</p>
+            <dl class="facts">
+              <dt>Gemaakt met</dt><dd>hackmywebsite.ai</dd>
+              <dt>Scan</dt><dd><code>scan-voorbeeld</code></dd>
+              <dt>Datum</dt><dd>1 januari 2027, 10:00 tot 10:40</dd>
+              <dt>Doel</dt><dd>https://webshop.example/</dd>
+            </dl>
+          </div>
+        </details>
+      </div>
+    </div>
+  </section>
+
+  <!-- 8 VOLGENDE STAP ====================================================== -->
+  <section class="section section--white" aria-labelledby="cta-titel">
+    <div class="wrap">
+      <div class="cta" data-reveal>
+        <div>
+          <p class="eyebrow">Volgende stap</p>
+          <h2 id="cta-titel">Begin vandaag met klus A</h2>
+          <p>Die lost het enige ernstige punt op. De andere twee zijn klein werk.</p>
+        </div>
+        <div class="cta__actions">
+          <a class="btn btn--accent btn--lg" href="#plan">Naar het stappenplan</a>
+          <button class="btn btn--light btn--lg" type="button" data-print>Bewaar als PDF</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<footer class="footer">
+  <div class="wrap footer__inner">
+    <span class="brand">
+      <span class="brand__mark"><svg class="i i--xs" aria-hidden="true"><use href="#i-shield"/></svg></span>
+      <span>hackmywebsite.ai<code>scan-voorbeeld</code></span>
+    </span>
+    <ul class="footer__meta">
+      <li>1 januari 2027</li>
+      <li><a href="#over">Over dit rapport</a></li>
+      <li><a href="#top">Terug naar boven</a></li>
+    </ul>
+  </div>
+</footer>
+
+<!-- in een scanmap: ../../report-kit/hackmywebsite-report.js -->
+<script src="hackmywebsite-report.js"></script>
+</body>
+</html>

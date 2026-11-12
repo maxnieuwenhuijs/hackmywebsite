@@ -1,0 +1,17 @@
+{
+  "model": "deepseek-flash",
+  "currency": "USD",
+  "ratesPerMillion": {
+    "input": 0.3,
+    "output": 1.2,
+    "cacheRead": 0.006
+  },
+  "note": "Peak DeepSeek flash rates from 2026-11-11. Off-peak is half. Update if the provider changes pricing.",
+  "measured": {
+    "note": "Linux DSH smoke test only. A full scan calibration is still required.",
+    "calibrationRunSteps": 0,
+    "calibrationRunUsd": 0,
+    "usdPerStep": 0
+  },
+  "presets": []
+}

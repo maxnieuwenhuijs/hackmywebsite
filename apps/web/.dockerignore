@@ -1,0 +1,9 @@
+node_modules
+.next
+data
+.env
+.env.local
+.env.production
+*.log
+tsconfig.tsbuildinfo
+worker-runs

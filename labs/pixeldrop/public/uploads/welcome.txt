@@ -1,0 +1,16 @@
+Welcome to PixelDrop
+====================
+
+PixelDrop is the internal file drop for the PixelForge design team.
+Upload a small text asset, tag it public or private, and share the
+download link with the rest of the studio.
+
+Public drops are listed on the Files page and can be downloaded by
+anyone who has the link. Private drops are only listed for their owner.
+
+Demo account
+------------
+email:    demo@pixeldrop.test
+password: demo1234
+
+This instance runs on localhost and is intended for workflow testing only.

@@ -1,0 +1,166 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>hackmywebsite.ai - security assessment portal</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/style.css?v=10">
+</head>
+<body>
+<div class="scanlines"></div>
+<div class="crt">
+
+  <header class="masthead">
+    <div class="logo">
+      <h1>HACKMY<span>WEBSITE.AI</span></h1>
+      <p class="tag">Security assessment portal</p>
+    </div>
+    <div class="ticker"><div class="ticker-inner">
+      Agent-driven penetration testing - anonymous attacker position - spend cap enforced per run - every finding carries its raw request and response - read-only on public hosts - write tests only where authorised
+    </div></div>
+  </header>
+
+  <main>
+    <section class="panel" id="control">
+      <h2><span class="num">01</span> TARGET AND BUDGET</h2>
+
+      <div class="mode-row">
+        <span class="mode-label">MODE</span>
+        <div class="modes" id="modes">
+          <button class="mode active" data-mode="recon">
+            RECON
+            <small>what a logged-out stranger can reach</small>
+          </button>
+          <button class="mode" data-mode="pentest">
+            ACTIVE PENTEST
+            <small>really tries to break in</small>
+          </button>
+        </div>
+      </div>
+
+      <div class="mode-row">
+        <span class="mode-label">ENGINE</span>
+        <div class="modes" id="engines">
+          <button class="mode active" data-engine="swarm">
+            SWARM
+            <small>specialists in parallel, shared findings board</small>
+          </button>
+          <button class="mode" data-engine="single">
+            SINGLE AGENT
+            <small>cheaper, sequential, one thread of work</small>
+          </button>
+        </div>
+      </div>
+
+      <label class="field">
+        <span>TARGET URL</span>
+        <input id="url" type="url" placeholder="https://your-site.example" autocomplete="off" spellcheck="false">
+      </label>
+
+      <div class="two-col">
+        <label class="field">
+          <span>RAPPORTTAAL / REPORT LANGUAGE</span>
+          <select id="lang" class="select">
+            <option value="nl">Nederlands</option>
+            <option value="en">English</option>
+            <option value="de">Deutsch</option>
+            <option value="fr">Francais</option>
+            <option value="es">Espanol</option>
+            <option value="pt">Portugues</option>
+            <option value="it">Italiano</option>
+            <option value="zh">Chinese</option>
+          </select>
+        </label>
+      </div>
+
+      <div class="budget-row">
+        <div class="meter-wrap">
+          <div class="meter-label">
+            <span>SPEND CAP</span>
+            <span id="budgetOut" class="meter-val">$2.00</span>
+          </div>
+          <input id="budget" type="range" min="0.05" max="20" step="0.05" value="2">
+          <div class="led" id="led"></div>
+          <div class="meter-foot">
+            <span id="stepsLeft">~177 steps</span>
+            <span id="tokEq">~0 tokens</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="presets" id="presets"></div>
+
+      <label class="check">
+        <input id="auth" type="checkbox">
+        <span>I own this site or hold written permission to test it.</span>
+      </label>
+
+      <label class="check check-danger">
+        <input id="aggressive" type="checkbox">
+        <span><b>Allow exploitation with state changes.</b> The agent may create, modify and
+        delete its own test objects to prove blast radius, and must revert them and prove the
+        revert. Real customer, staff and admin records are never touched.
+        <em>Recorded in the report with the consent phrase.</em></span>
+      </label>
+
+      <div class="btn-row">
+        <button id="start" class="btn big">START SCAN</button>
+        <button id="stop" class="btn ghost" disabled>STOP</button>
+      </div>
+      <p class="hint" id="scopeHint">Pick a mode and an engine, then enter a target.</p>
+    </section>
+
+    <section class="panel" id="live" hidden>
+      <h2><span class="num">02</span> LIVE RUN <span id="status" class="badge">RUNNING</span></h2>
+
+      <div class="gauges">
+        <div class="gauge">
+          <span class="g-label">SPENT</span>
+          <span class="g-val" id="spent">$0.0000</span>
+          <span class="g-sub" id="spentSub">of $0.00</span>
+        </div>
+        <div class="gauge">
+          <span class="g-label">REMAINING</span>
+          <span class="g-val" id="remaining">$0.0000</span>
+          <span class="g-sub" id="steps">0 steps</span>
+        </div>
+        <div class="gauge">
+          <span class="g-label">TOKENS IN / OUT</span>
+          <span class="g-val" id="tokens">0 / 0</span>
+          <span class="g-sub" id="cache">cache 0</span>
+        </div>
+      </div>
+
+      <div class="led big-led" id="led2"></div>
+      <div class="log" id="log"></div>
+    </section>
+
+    <section class="panel" id="results" hidden>
+      <h2><span class="num">03</span> FINDINGS <span id="count" class="badge">0</span>
+        <a id="webReport" class="btn small is-disabled" href="#" target="_blank" rel="noopener" role="button" aria-disabled="true">RAPPORT &#8599;</a>
+        <a id="download" class="btn small is-disabled" href="#" download role="button" aria-disabled="true">PDF</a>
+      </h2>
+      <p class="summary" id="summary"></p>
+      <div id="findings"></div>
+      <p class="blocked" id="blocked"></p>
+      <p class="hint" id="dlHint"></p>
+    </section>
+
+    <section class="panel" id="history">
+      <h2><span class="num">04</span> ARCHIVE</h2>
+      <div id="scans" class="archive">no scans yet</div>
+    </section>
+  </main>
+
+  <footer>
+    <span>hackmywebsite.ai <span id="build">build 10</span></span>
+    <span id="clock">--:--:--</span>
+    <span>LOCALHOST ONLY</span>
+  </footer>
+</div>
+<script src="/app.js?v=10"></script>
+</body>
+</html>

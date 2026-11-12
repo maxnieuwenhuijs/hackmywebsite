@@ -1,0 +1,22 @@
+services:
+  db:
+    image: mariadb:11
+    container_name: hmw-mariadb
+    restart: unless-stopped
+    environment:
+      MARIADB_ROOT_PASSWORD: hmwroot
+      MARIADB_DATABASE: hmw
+      MARIADB_USER: hmw
+      MARIADB_PASSWORD: hmwpass
+    ports:
+      - "3308:3306"
+    volumes:
+      - hmw-db:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+volumes:
+  hmw-db:

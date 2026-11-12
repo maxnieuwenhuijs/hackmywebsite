@@ -1,0 +1,2 @@
+-- AlterTable
+ALTER TABLE `Wallet` ADD COLUMN `heldCents` INTEGER NOT NULL DEFAULT 0;
