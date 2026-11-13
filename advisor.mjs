@@ -5,6 +5,8 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { priorPayload } from "./handoff.mjs";
+import { langByCode } from "./i18n.mjs";
+import { translateJson } from "./translate-json.mjs";
 
 const dir = process.argv[2];
 if (!dir) { console.error("usage: node advisor.mjs <scan-dir>"); process.exit(2); }
@@ -13,6 +15,7 @@ const getFlag = (name, fallback) => {
   return index > 0 ? process.argv[index + 1] : fallback;
 };
 const LANG = getFlag("lang", "nl");
+const LANG_INFO = langByCode(LANG);
 const BUDGET = Number(getFlag("budget", "0.05"));
 const MODEL = getFlag("model", process.env.DEEPSEEK_REPORT_MODEL || "deepseek-flash");
 const API_BASE = (process.env.DEEPSEEK_BASE_URL || "https://api.deepseek.com").replace(/\/+$/, "");
@@ -49,6 +52,23 @@ if (!scan) { console.error("scan.json is missing"); process.exit(2); }
 function fallbackAdvice(reason) {
   const budget = Number(scan.budgetUsd || 0);
   const extra = Math.max(25, Math.round(budget * 0.5));
+  if (LANG !== "nl") {
+    return {
+      generatedBy: "advice-agent",
+      model: "heuristic",
+      generatedAt: new Date().toISOString(),
+      reason,
+      headline: `About $${extra} extra would cover the largest blind spots`,
+      summary: "This run stopped at the budget limit. More budget buys coverage and verification, not a guarantee of new findings.",
+      confidence: "medium",
+      items: [
+        { title: "Test authentication and roles systematically", extraBudgetUsd: extra, what: "Test every role and object with two accounts, including vertical privileges.", why: "The current run stopped before every role and object was tested.", expected: "More confidence in access-control findings." },
+        { title: "Verify the impact of the findings", extraBudgetUsd: Math.round(extra * 0.8), what: "Try to prove the reported access problems with your own test data and restore it.", why: "Access without login is not yet proven data exposure.", expected: "Evidence of real impact instead of a suspicion." },
+        { title: "Finish browser and chain tests", extraBudgetUsd: Math.round(extra * 0.6), what: "Test the full browser flow, rate limiting and combinations between findings.", why: "Single endpoints say little about an exploitable chain.", expected: "Better prioritisation and less manual work." },
+      ],
+      limits: "More budget increases coverage, but not automatically the number of findings. A clean run remains a valid result.",
+    };
+  }
   return {
     generatedBy: "advice-agent",
     model: "heuristic",
@@ -104,7 +124,8 @@ const priorText = prior ? JSON.stringify({
 }, null, 1) : "none";
 
 const prompt = `Je bent een senior penetration test lead. Je schrijft een kort advies voor de eigenaar van ${scan.url} boven aan het rapport.
-De eigenaar is geen beveiligingsexpert. Schrijf in het ${LANG.toUpperCase()} op B1-niveau, korte zinnen, je-vorm, actief. Nooit een em dash, nooit emoji's.
+${LANG === "nl" ? "" : `CRITICAL LANGUAGE RULE: write every JSON string value in ${LANG_INFO.ai}. Do not write Dutch in the headline, summary, items, why, expected or limits.`}
+De eigenaar is geen beveiligingsexpert. Schrijf in het ${LANG_INFO.ai.toUpperCase()} op B1-niveau, korte zinnen, je-vorm, actief. Nooit een em dash, nooit emoji's.
 
 Deze run:
 - scan: ${scan.id}
@@ -160,7 +181,7 @@ async function runModel() {
     body: JSON.stringify({
       model: MODEL,
       messages: [
-        { role: "system", content: "You are a senior penetration-test lead. Return only valid JSON. Never invent findings. Never include secrets or personal data." },
+        { role: "system", content: `You are a senior penetration-test lead. Write every user-facing string in ${LANG_INFO.ai}. Return only valid JSON. Never invent findings. Never include secrets or personal data.` },
         { role: "user", content: prompt },
       ],
       response_format: { type: "json_object" },
@@ -216,9 +237,43 @@ advice.headline = clean(advice.headline || "Meer budget geeft meer dekking", 160
 advice.summary = clean(advice.summary || "", 500);
 advice.limits = clean(advice.limits || "Meer budget geeft meer dekking, geen garantie op nieuwe kwetsbaarheden.", 260);
 
-fs.writeFileSync(path.join(dir, "advice.json"), JSON.stringify(advice, null, 2));
+if (LANG !== "nl" && LANG !== "en") {
+  const key = deepseekKey();
+  if (key) {
+    try {
+      const translated = await translateJson({
+        headline: advice.headline,
+        summary: advice.summary,
+        items: advice.items,
+        limits: advice.limits,
+      }, { language: LANG, model: MODEL, apiKey: key });
+      if (translated.value?.items?.length === advice.items.length) {
+        advice.headline = clean(translated.value.headline, 160);
+        advice.summary = clean(translated.value.summary, 500);
+        advice.limits = clean(translated.value.limits, 260);
+        advice.items = advice.items.map((item, index) => ({
+          ...item,
+          title: clean(translated.value.items[index]?.title || item.title, 140),
+          what: clean(translated.value.items[index]?.what || item.what, 260),
+          why: clean(translated.value.items[index]?.why || item.why, 220),
+          expected: clean(translated.value.items[index]?.expected || item.expected, 220),
+        }));
+        advice.costUsd = Number((Number(advice.costUsd || 0) + translated.costUsd).toFixed(6));
+      }
+    } catch (error) {
+      console.error(`advisor translation failed: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+}
+
+const adviceFile = path.join(dir, `advice.${LANG}.json`);
+fs.writeFileSync(adviceFile, JSON.stringify(advice, null, 2));
+if (LANG === "nl") {
+  // Keep the legacy file for existing reports and scripts.
+  fs.writeFileSync(path.join(dir, "advice.json"), JSON.stringify(advice, null, 2));
+}
 console.log(JSON.stringify({
-  out: path.join(dir, "advice.json"),
+  out: adviceFile,
   generatedBy: advice.generatedBy,
   model: advice.model,
   items: advice.items.length,

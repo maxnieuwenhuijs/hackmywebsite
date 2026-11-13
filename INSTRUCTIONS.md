@@ -484,6 +484,52 @@ Before a rerun, `handoff.mjs` loads the previous run for the same host:
 
 The report block also says that the next run will receive this context.
 
+### 7.10 Translated reports
+
+A finished scan can be rendered in any supported report language.
+
+URL:
+
+```text
+/api/scans/<scan-id>/rapport.html?lang=en
+/api/scans/<scan-id>/rapport.pdf?lang=de
+```
+
+Supported codes:
+
+```text
+nl, en, de, fr, es, pt, it, zh
+```
+
+Pipeline:
+
+1. `report_ai.mjs --lang <code>` writes `content.<code>.json`.
+2. For non-Dutch languages a dedicated translation pass rewrites all human-readable JSON fields and keeps technical evidence untouched.
+3. `advisor.mjs --lang <code>` writes `advice.<code>.json`.
+4. `report_kit_build.mjs --lang <code>` renders the localized page and advice block.
+5. `report-kit/bundle.mjs` writes the self-contained `rapport.<code>.html`.
+6. The PDF route prints that HTML.
+
+Manual rebuild:
+
+```powershell
+$d = "scans/<scan-id>"
+node report_ai.mjs $d --lang en
+node advisor.mjs $d --lang en
+node report_kit_build.mjs $d --lang en
+node report-kit/bundle.mjs "$d\rapport.en.src.html" "$d\rapport.en.html"
+```
+
+Verified:
+
+- English report
+- German report
+- localized advice labels
+- technical evidence left unchanged
+- language selector in the local portal
+
+When a translation fails, the build logs it. Re-run the command before publishing the report.
+
 ## 8. Admin area
 
 Open:

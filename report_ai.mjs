@@ -5,6 +5,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { langByCode } from './i18n.mjs';
+import { translateJson } from './translate-json.mjs';
 
 const dir = process.argv[2];
 if (!dir) { console.error('usage: node report_ai.mjs <scan-dir>'); process.exit(2); }
@@ -91,6 +92,7 @@ const tested = (data.tested || []).slice(0, 60);
 const writes = (data.writeActions || []).map((w) => ({ method: w.method, url: w.url, effect: w.effect, reverted: w.reverted }));
 
 const prompt = `Je schrijft een beveiligingsrapport in het ${LANG_INFO.ai.toUpperCase()} voor de eigenaar van een website.
+${LANG === 'nl' ? '' : `CRITICAL LANGUAGE RULE: every string value in the JSON must be written in ${LANG_INFO.ai}. Do not write Dutch in titles, lede, risk, fix, cause, solution, note, plan, good, limits, glossary or next_text. Translate all of it.`}
 De eigenaar is geen beveiligingsexpert. Schrijf op taalniveau B1: korte zinnen (maximaal 20 woorden),
 je-vorm, actief, concreet. Nooit een em dash, nooit emoji's.
 
@@ -184,7 +186,7 @@ async function runModel(text, extra = '') {
     messages: [
       {
         role: 'system',
-        content: 'You are a security report writer. Return only a valid JSON object matching the requested schema. No markdown, no prose and no code fences. Never invent findings, tokens or personal data.',
+        content: `You are a security report writer. Write every user-facing string in ${LANG_INFO.ai}. Return only a valid JSON object matching the requested schema. No markdown, no prose and no code fences. Never invent findings, tokens or personal data.`,
       },
       { role: 'user', content: text + extra },
     ],
@@ -234,6 +236,31 @@ async function runModel(text, extra = '') {
   if (!result.json) {
     console.error('DeepSeek did not return valid report JSON after 2 attempts');
     process.exit(1);
+  }
+  if (LANG !== 'nl') {
+    // The writer sometimes keeps Dutch when the prompt is Dutch. A dedicated JSON
+    // translation pass is deterministic and keeps the evidence fields untouched.
+    try {
+      const source = result.json;
+      const translated = await translateJson(source, { language: LANG, model: MODEL, apiKey: KEY });
+      const fixed = translated.value;
+      if (Array.isArray(fixed.findings) && Array.isArray(source.findings)) {
+        for (let i = 0; i < fixed.findings.length; i++) {
+          if (!source.findings[i]) continue;
+          fixed.findings[i].sev = source.findings[i].sev;
+          fixed.findings[i].status = source.findings[i].status;
+          fixed.findings[i].src_n = source.findings[i].src_n;
+          fixed.findings[i].ease = source.findings[i].ease;
+          fixed.findings[i].impact = source.findings[i].impact;
+        }
+      }
+      result.json = fixed;
+      result.spent += translated.costUsd;
+      result.usage = translated.usage || result.usage;
+      console.error(`translated report content to ${LANG_INFO.ai} for $${translated.costUsd.toFixed(4)}`);
+    } catch (error) {
+      console.error(`report translation failed, keeping the source language: ${error instanceof Error ? error.message : String(error)}`);
+    }
   }
   save(result.json, result.spent, result.usage, result.model);
 })();

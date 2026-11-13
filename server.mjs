@@ -155,6 +155,7 @@ const server = http.createServer(async (req, res) => {
           (() => { try { return fs.statSync(path.join(dir, 'findings.json')).mtimeMs; } catch { return 0; } })(),
           (() => { try { return fs.statSync(path.join(dir, 'scan.json')).mtimeMs; } catch { return 0; } })(),
           (() => { try { return fs.statSync(path.join(dir, 'evidence.json')).mtimeMs; } catch { return 0; } })(),
+          (() => { try { return fs.statSync(path.join(dir, `advice.${lang}.json`)).mtimeMs; } catch { return 0; } })(),
           (() => { try { return fs.statSync(path.join(dir, 'advice.json')).mtimeMs; } catch { return 0; } })(),
         );
         const fresh = fs.existsSync(out) && fs.statSync(out).mtimeMs >= stamp;

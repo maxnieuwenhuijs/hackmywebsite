@@ -49,6 +49,9 @@ Linux worker setup: [LINUX-SERVER-TODO.md](LINUX-SERVER-TODO.md).
 - [x] Added a "Deels bevestigd" status for confirmed access with unproven impact.
 - [x] Added a budget-advice agent that writes a "Meer budget, meer dekking" block near the top of the report.
 - [x] Added a prior-run handoff so a rerun receives findings, tested areas and the previous advice.
+- [x] Added translated report pipeline with per-language content and advice files.
+- [x] Verified English and German translated reports, including localized advice labels.
+- [ ] Verify the remaining report languages with a native speaker or review pass.
 - [ ] Linux DSH worker spike: Chromium, nuclei, controlled lab scan.
 - [ ] Full Linux swarm run and cost calibration.
 - [x] Standalone production web server verified locally.

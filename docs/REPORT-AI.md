@@ -73,9 +73,26 @@ If the response is not valid JSON, the script retries once with a stricter instr
 - Final report encryption and the 48-hour delivery flow are unchanged and happen later in the worker.
 - API errors are truncated before logging and never include the key.
 
+## Translation
+
+`report_ai.mjs --lang <code>` writes `content.<code>.json`.
+
+For every language other than Dutch, the generated JSON goes through `translate-json.mjs`. That pass translates human-readable fields and leaves technical evidence, request/response bodies, identifiers and schema values unchanged.
+
+`advisor.mjs --lang <code>` writes `advice.<code>.json`. `report_kit_build.mjs --lang <code>` renders localized labels and advice.
+
+Supported codes:
+
+```text
+nl, en, de, fr, es, pt, it, zh
+```
+
+English and German have been generated and checked. The remaining languages need a native review pass.
+
 ## Related docs
 
 - `docs/REPORT-DELIVERY.md`
 - `docs/WINDOWS-VM.md`
 - `docs/COMPUTE-DECISION.md`
 - `docs/SAAS-PORTAL.md`
+- `INSTRUCTIONS.md`

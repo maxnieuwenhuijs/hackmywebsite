@@ -20,6 +20,7 @@ This repository contains the web portal, worker API, report pipeline, deployment
 - Worker API with token auth, leases and encrypted upload
 - Sealed report delivery with a browser-held passphrase
 - Budget advice agent near the top of scan reports
+- Translated reports for Dutch, English, German, French, Spanish, Portuguese, Italian and Chinese
 - Prior-run handoff for swarm reruns
 - DSH launcher for Windows desktop and Linux headless
 - Local scan runner, swarm and report kit
