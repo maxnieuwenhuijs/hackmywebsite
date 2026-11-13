@@ -530,6 +530,26 @@ Verified:
 
 When a translation fails, the build logs it. Re-run the command before publishing the report.
 
+### 7.11 Download the complete HTML report
+
+The report is a single self-contained HTML file. It can be downloaded directly.
+
+HTML download URL:
+
+```text
+/api/scans/<scan-id>/rapport.html?lang=en&download=1
+```
+
+Local portal:
+
+1. Open a completed scan.
+2. Choose the report language.
+3. Click **HTML** to download the complete file.
+4. Click **PDF** to download the printed version.
+5. Click **RAPPORT** to open the report in the browser.
+
+The HTML download includes the styling, report data and advice in one file. It does not need the scan folder to open. Webfonts may still load from Google when you are online; the content and layout work without that request.
+
 ## 8. Admin area
 
 Open:

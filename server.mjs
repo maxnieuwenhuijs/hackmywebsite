@@ -171,7 +171,12 @@ const server = http.createServer(async (req, res) => {
           run([path.join(HERE, 'report-kit', 'bundle.mjs'), src, out], 60000);
         }
         const body = fs.readFileSync(out);
-        res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'content-length': body.length, 'cache-control': 'no-store' });
+        const headers = { 'content-type': 'text/html; charset=utf-8', 'content-length': body.length, 'cache-control': 'no-store' };
+        if (u.searchParams.get('download') === '1') {
+          const hostPart = String(scan.host || 'report').replace(/[^a-zA-Z0-9.-]/g, '-').replace(/\./g, '-');
+          headers['content-disposition'] = `attachment; filename="hackmywebsite-${hostPart}-${lang}.html"`;
+        }
+        res.writeHead(200, headers);
         return res.end(body);
       } catch (err) {
         return json(res, 500, { error: String(err && err.message || err) });

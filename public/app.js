@@ -127,6 +127,20 @@ function renderFindings(data) {
     wr.setAttribute('aria-disabled', 'true');
   }
 
+  const dh = $('downloadHtml');
+  if (!running && scanId) {
+    dh.href = '/api/scans/' + scanId + '/rapport.html?lang=' + encodeURIComponent(lang) + '&download=1';
+    const hostPart = String((data.scan && data.scan.host) || 'report').replace(/[^a-zA-Z0-9.-]/g, '-').replace(/\./g, '-');
+    const day = new Date().toISOString().slice(0, 10);
+    dh.setAttribute('download', 'hackmywebsite-' + hostPart + '-' + day + '-' + lang + '.html');
+    dh.classList.remove('is-disabled');
+    dh.setAttribute('aria-disabled', 'false');
+  } else {
+    dh.href = '#';
+    dh.classList.add('is-disabled');
+    dh.setAttribute('aria-disabled', 'true');
+  }
+
   const dl = $('download');
   if (!running && scanId) {
     dl.href = '/api/scans/' + scanId + '/rapport.pdf?lang=' + encodeURIComponent(lang);
@@ -142,8 +156,8 @@ function renderFindings(data) {
   }
 
   $('dlHint').textContent = running
-    ? 'Report and PDF become available when the run finishes.'
-    : 'Report builds on first click and takes a few seconds.';
+    ? 'Report, HTML and PDF become available when the run finishes.'
+    : 'HTML and PDF build on first click and can take a few seconds.';
 
   const box = $('findings');
   box.innerHTML = '';

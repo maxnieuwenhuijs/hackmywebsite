@@ -51,6 +51,7 @@ Linux worker setup: [LINUX-SERVER-TODO.md](LINUX-SERVER-TODO.md).
 - [x] Added a prior-run handoff so a rerun receives findings, tested areas and the previous advice.
 - [x] Added translated report pipeline with per-language content and advice files.
 - [x] Verified English and German translated reports, including localized advice labels.
+- [x] Added a direct complete-HTML download button and attachment endpoint.
 - [ ] Verify the remaining report languages with a native speaker or review pass.
 - [ ] Linux DSH worker spike: Chromium, nuclei, controlled lab scan.
 - [ ] Full Linux swarm run and cost calibration.
