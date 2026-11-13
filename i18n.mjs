@@ -131,14 +131,87 @@ const P = {
   'Hoe hoger een punt staat, hoe groter de schade. Hoe verder naar rechts, hoe makkelijker het te misbruiken is. Wijs een nummer aan voor uitleg.': { en: 'The higher an issue sits, the greater the damage. The further right, the easier it is to abuse. Hover a number for the explanation.', de: 'Je h?her ein Punkt steht, desto gr??er der Schaden. Je weiter rechts, desto leichter missbrauchbar. Nummer f?r Erkl?rung.', fr: 'Plus un point est haut, plus le dommage est grand. Plus il est ? droite, plus il est facile ? exploiter. Survolez un num?ro.', es: 'Cuanto m?s alto el punto, mayor el da?o. Cuanto m?s a la derecha, m?s f?cil de abusar. Pasa el rat?n por un n?mero.', pt: 'Quanto mais alto o ponto, maior o dano. Quanto mais ? direita, mais f?cil de abusar. Passe o rato por um n?mero.', it: 'Pi? in alto il punto, maggiore il danno. Pi? a destra, pi? facile da sfruttare. Passa sul numero per la spiegazione.', zh: '???????????????????????????' },
 };
 
+// Strings added after the first translation pass. English is the fallback for
+// languages without an explicit entry.
+const EXTRA_P = {
+  'Uitgevoerd door': { en: 'Executed by', de: 'Ausgeführt von' },
+  'Serverantwoord': { en: 'Server response', de: 'Serverantwort' },
+  'Bewijs': { en: 'Proof', de: 'Nachweis' },
+  'Budgetplafond bereikt': { en: 'Budget limit reached', de: 'Budgetlimit erreicht' },
+  'Let op: het budgetplafond is bereikt.': { en: 'Note: the budget limit was reached.', de: 'Hinweis: Das Budgetlimit wurde erreicht.' },
+  'WAARSCHUWING = belangrijk': { en: 'WARNING = important', de: 'WARNUNG = wichtig' },
+  '! WAARSCHUWING': { en: '! WARNING', de: '! WARNUNG' },
+  'Wat de zwerm dacht': { en: 'What the swarm thought', de: 'Was der Schwarm dachte' },
+  'Korte notities uit de missie, in gewone taal. Elke agent heeft een eigen kleur. Wat een waarschuwing verdient, staat rood onderstreept met een WAARSCHUWING-label.': {
+    en: 'Short notes from the mission, in plain language. Each agent has its own colour. Anything that deserves a warning is underlined in red with a WARNING label.',
+    de: 'Kurze Notizen aus der Mission in einfacher Sprache. Jeder Agent hat eine eigene Farbe. Was eine Warnung verdient, ist rot unterstrichen und mit einem WARNUNG-Label markiert.',
+  },
+  'De zwerm begon breed en ging steeds dieper op wat hij vond.': {
+    en: 'The swarm started broad and went deeper into what it found.',
+    de: 'Der Schwarm begann breit und ging bei seinen Funden immer tiefer.',
+  },
+  'De kaart heeft JavaScript nodig. Alle punten staan ook bij de bevindingen.': {
+    en: 'The map requires JavaScript. All issues are also listed under findings.',
+    de: 'Die Karte benötigt JavaScript. Alle Punkte stehen auch bei den Befunden.',
+  },
+  'Bevestigd en vermoedelijk': { en: 'Confirmed and suspected', de: 'Bestätigt und vermutet' },
+  'Bevestigd: we hebben het zelf aangetoond. Vermoedelijk: een scanner meldt het, maar we konden het niet zelf herhalen.': {
+    en: 'Confirmed: we demonstrated it ourselves. Suspected: a scanner reported it, but we could not reproduce it ourselves.',
+    de: 'Bestätigt: Wir haben es selbst nachgewiesen. Vermutet: Ein Scanner meldet es, aber wir konnten es nicht selbst reproduzieren.',
+  },
+  'Dit was een actieve test met toegestane wijzigingen op eigen testobjecten, in opdracht van de eigenaar van de site.': {
+    en: 'This was an active test with permitted changes to our own test objects, commissioned by the site owner.',
+    de: 'Dies war ein aktiver Test mit erlaubten Änderungen an eigenen Testobjekten im Auftrag des Website-Eigentümers.',
+  },
+  'Dit was een actieve test van buitenaf, in opdracht van de eigenaar van de site.': {
+    en: 'This was an active external test, commissioned by the site owner.',
+    de: 'Dies war ein aktiver externer Test im Auftrag des Website-Eigentümers.',
+  },
+  'Beperkte dekking': { en: 'Limited coverage', de: 'Begrenzte Abdeckung' },
+  'Niet elk pad is getest.': { en: 'Not every path was tested.', de: 'Nicht jeder Pfad wurde getestet.' },
+  'Over dit rapport': { en: 'About this report', de: 'Über diesen Bericht' },
+  'Werkwijze, privacy en gegevens van de scan': { en: 'Method, privacy and scan details', de: 'Methode, Datenschutz und Scandaten' },
+  'Gemaakt met': { en: 'Made with', de: 'Erstellt mit' },
+  'Kosten van de scan': { en: 'Cost of the scan', de: 'Kosten des Scans' },
+  'De schade volgt uit de ernst van het punt. Het gemak van misbruik volgt uit het soort probleem en of er inloggegevens nodig waren. Dit zijn inschattingen op basis van het bewijs. Een': {
+    en: 'Damage follows from the severity of the issue. Ease of abuse follows from the type of problem and whether credentials were required. These are estimates based on the evidence. A',
+    de: 'Der Schaden folgt aus der Schwere des Punktes. Die Leichtigkeit des Missbrauchs folgt aus der Art des Problems und ob Zugangsdaten nötig waren. Das sind Einschätzungen auf Basis der Beweise. Ein',
+  },
+  'punt zetten we een stap lager.': { en: 'issue is rated one step lower.', de: 'Punkt wird eine Stufe niedriger bewertet.' },
+  'Beoordeling: schade': { en: 'Rating: damage', de: 'Bewertung: Schaden' },
+  ', misbruik': { en: ', abuse', de: ', Missbrauch' },
+  'Testbewijs': { en: 'Test evidence', de: 'Testnachweis' },
+  'Aanvalsketen': { en: 'Attack chain', de: 'Angriffskette' },
+  'Bewezen aanval': { en: 'Proven attack', de: 'Nachgewiesener Angriff' },
+  'verdeeld naar ernst': { en: 'grouped by severity', de: 'nach Schweregrad' },
+  'De beoordelingen zijn inschattingen op basis van het verzamelde bewijs. Het rapport beschrijft de site op het moment van testen. Dat we iets niet vonden, betekent niet dat het er niet is.': {
+    en: 'The ratings are estimates based on the collected evidence. The report describes the site at the time of testing. Not finding something does not mean it is not there.',
+    de: 'Die Bewertungen sind Einschätzungen auf Basis der gesammelten Beweise. Der Bericht beschreibt die Website zum Zeitpunkt des Tests. Etwas nicht zu finden bedeutet nicht, dass es nicht vorhanden ist.',
+  },
+  'Persoonsgegevens in het bewijs zijn ingekort om de privacy van klanten te beschermen.': {
+    en: 'Personal data in the evidence is shortened to protect customer privacy.',
+    de: 'Personenbezogene Daten im Nachweis sind zum Schutz der Kundendatenschutz gekürzt.',
+  },
+  'Deels bevestigd': { en: 'Partially confirmed', de: 'Teilweise bestätigt' },
+  'Bevestigd met eigen test': { en: 'Confirmed with our own test', de: 'Mit eigenem Test bestätigt' },
+  'Vermoedelijk, niet zelf bevestigd': { en: 'Suspected, not independently confirmed', de: 'Vermutet, nicht selbst bestätigt' },
+  'vermoedelijk': { en: 'suspected', de: 'vermutet' },
+  'Bevestigd': { en: 'Confirmed', de: 'Bestätigt' },
+  'Vermoedelijk': { en: 'Suspected', de: 'Vermutet' },
+  'Schade': { en: 'Damage', de: 'Schaden' },
+  'Makkelijk te misbruiken': { en: 'Ease of abuse', de: 'Leicht zu missbrauchen' },
+};
+
 /** Translate the fixed chrome of a built report. Content is already in the target language. */
 export function translateHtml(html, code) {
   if (!code || code === 'nl') return html;
   // translate TEXT nodes only: attribute values like data-sev="kritiek" are CSS hooks
+  const table = { ...P, ...EXTRA_P };
+  const entries = Object.entries(table).sort((a, b) => b[0].length - a[0].length);
   const one = (text) => {
     let out = text;
-    for (const [nl, table] of Object.entries(P)) {
-      const target = table[code] || table.en;
+    for (const [nl, row] of entries) {
+      const target = row[code] || row.en;
       if (!target || target === nl) continue;
       out = out.split(nl).join(target);
     }

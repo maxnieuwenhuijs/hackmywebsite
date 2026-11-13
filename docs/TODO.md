@@ -52,6 +52,7 @@ Linux worker setup: [LINUX-SERVER-TODO.md](LINUX-SERVER-TODO.md).
 - [x] Added translated report pipeline with per-language content and advice files.
 - [x] Verified English and German translated reports, including localized advice labels.
 - [x] Added a direct complete-HTML download button and attachment endpoint.
+- [x] Audited translated report labels: hardcoded labels, JS status/filter/matrix text, dates, budget copy and dossier quotes now translate.
 - [ ] Verify the remaining report languages with a native speaker or review pass.
 - [ ] Linux DSH worker spike: Chromium, nuclei, controlled lab scan.
 - [ ] Full Linux swarm run and cost calibration.

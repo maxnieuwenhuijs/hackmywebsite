@@ -29,9 +29,23 @@
   const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   const $ = (sel, scope = document) => scope.querySelector(sel);
   const $$ = (sel, scope = document) => Array.from(scope.querySelectorAll(sel));
-  const number = new Intl.NumberFormat('nl-NL');
+  const LANG = document.documentElement.lang || 'nl';
+  const LOCALE = { nl: 'nl-NL', en: 'en-GB', de: 'de-DE', fr: 'fr-FR', es: 'es-ES', pt: 'pt-PT', it: 'it-IT', zh: 'zh-CN' }[LANG] || 'en-GB';
+  const number = new Intl.NumberFormat(LOCALE);
 
-  const SEVERITY = { kritiek: 'Kritiek', hoog: 'Hoog', middel: 'Middel', laag: 'Laag', info: 'Ter info' };
+  const LABELS = {
+    nl: { severity: { kritiek: 'Kritiek', hoog: 'Hoog', middel: 'Middel', laag: 'Laag', info: 'Ter info' }, statusSuspected: 'Vermoedelijk, niet zelf bevestigd', statusConfirmed: 'Bevestigd met eigen test', filterStatus: (shown, total) => `${shown} van ${total} punten`, expand: 'Alles openklappen', collapse: 'Alles inklappen' },
+    en: { severity: { kritiek: 'Critical', hoog: 'High', middel: 'Medium', laag: 'Low', info: 'Info' }, statusSuspected: 'Suspected, not independently confirmed', statusConfirmed: 'Confirmed with our own test', filterStatus: (shown, total) => `${shown} of ${total} issues`, expand: 'Expand all', collapse: 'Collapse all' },
+    de: { severity: { kritiek: 'Kritisch', hoog: 'Hoch', middel: 'Mittel', laag: 'Niedrig', info: 'Info' }, statusSuspected: 'Vermutet, nicht selbst bestätigt', statusConfirmed: 'Mit eigenem Test bestätigt', filterStatus: (shown, total) => `${shown} von ${total} Punkten`, expand: 'Alle öffnen', collapse: 'Alle schließen' },
+  }[LANG] || {
+    severity: { kritiek: 'Critical', hoog: 'High', middel: 'Medium', laag: 'Low', info: 'Info' },
+    statusSuspected: 'Suspected, not independently confirmed',
+    statusConfirmed: 'Confirmed with our own test',
+    filterStatus: (shown, total) => `${shown} of ${total} issues`,
+    expand: 'Expand all',
+    collapse: 'Collapse all',
+  };
+  const SEVERITY = LABELS.severity;
   const FILTERS = {
     alle: () => true,
     ernstig: (sev) => sev === 'kritiek' || sev === 'hoog',
@@ -201,8 +215,13 @@
     const matrix = $('[data-matrix]');
     const grid = matrix && $('.matrix__grid', matrix);
     if (!grid) return;
-    const yLabels = (matrix.dataset.yLabels || '').split('|');
-    const xLabels = (matrix.dataset.xLabels || '').split('|');
+    const MATRIX_LABELS = {
+      nl: { y: 'Klein|Beperkt|Merkbaar|Groot|Zeer groot', x: 'Zeer lastig|Lastig|Gemiddeld|Makkelijk|Heel makkelijk' },
+      en: { y: 'Minor|Limited|Noticeable|Large|Very large', x: 'Very hard|Hard|Average|Easy|Very easy' },
+      de: { y: 'Gering|Begrenzt|Spürbar|Groß|Sehr groß', x: 'Sehr schwer|Schwer|Mittel|Einfach|Sehr einfach' },
+    }[LANG];
+    const yLabels = (MATRIX_LABELS?.y || matrix.dataset.yLabels || '').split('|');
+    const xLabels = (MATRIX_LABELS?.x || matrix.dataset.xLabels || '').split('|');
     const frag = document.createDocumentFragment();
 
     for (let impact = 5; impact >= 1; impact--) {
@@ -245,7 +264,7 @@
       const sev = slot('sev');
       sev.dataset.sev = f.sev;
       sev.textContent = SEVERITY[f.sev] || f.sev;
-      slot('status').textContent = f.suspected ? 'Vermoedelijk, niet zelf bevestigd' : 'Bevestigd met eigen test';
+      slot('status').textContent = f.suspected ? LABELS.statusSuspected : LABELS.statusConfirmed;
       slot('title').textContent = f.title;
       slot('lede').textContent = f.lede;
       slot('where').textContent = f.where;
@@ -304,7 +323,7 @@
       shown++;
     });
     const status = $('[data-filter-status]');
-    if (status) status.textContent = `${shown} van ${all.length} punten`;
+    if (status) status.textContent = LABELS.filterStatus(shown, all.length);
     syncExpandAll();
   }
 
@@ -324,6 +343,10 @@
     const all = $('[data-expand-all]');
 
     if (all) {
+      all.dataset.labelOpen = LABELS.collapse;
+      all.dataset.labelClosed = LABELS.expand;
+      const initialLabel = $('[data-label]', all);
+      if (initialLabel) initialLabel.textContent = LABELS.expand;
       syncExpandAll = () => {
         const visible = findings.filter((f) => !f.classList.contains('is-filtered-out'));
         const open = visible.length > 0 && visible.every((f) => f.open);

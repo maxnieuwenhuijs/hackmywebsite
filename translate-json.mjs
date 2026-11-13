@@ -29,7 +29,7 @@ export async function translateJson(value, { language, model = "deepseek-flash",
   const prompt = `Translate the human-readable strings in this security report JSON from Dutch into ${info.ai}.
 Keep every key, array, number, URL, request, response, evidence, model name and identifier unchanged.
 Do not translate schema values: sev must stay kritiek|hoog|middel|laag|info, status must stay bevestigd|vermoedelijk|deels_bevestigd, effort must stay klein|middel|groot.
-Translate: verdict_title, verdict_lede, alert_title, alert_text, findings[].title, findings[].where, findings[].lede, findings[].risk, findings[].fix, findings[].cause, findings[].solution, findings[].note, plan titles/text, good, limits, glossary term/def, next_title, next_text.
+Translate: verdict_title, verdict_lede, alert_title, alert_text, findings[].title, findings[].where, findings[].lede, findings[].risk, findings[].fix, findings[].cause, findings[].solution, findings[].note, findings[].status_note, plan titles/text, good, limits, glossary term/def, next_title, next_text.
 Return ONLY the same JSON object, no markdown, no prose.
 
 ${source}`;

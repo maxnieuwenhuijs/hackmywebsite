@@ -2,8 +2,10 @@
 // Structure, classes and data-attributes come straight from report-kit/voorbeeld.html.
 // Usage: node report_kit_build.mjs <scan-dir>
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { translateHtml, langByCode } from './i18n.mjs';
+import { translateJson } from './translate-json.mjs';
 
 const HERE = import.meta.dirname;
 const dir = process.argv[2];
@@ -31,6 +33,23 @@ const ADVICE_COPY = {
   zh: { eyebrow: '建议代理', title: '更多预算，更大覆盖', why: '原因', expected: '预期', runAgain: '再次运行？', runText: '下一次运行会收到这些发现、之前的建议和已测试区域。Swarm 不会从零开始。', generated: '由建议代理生成', with: '，模型 ', context: '，上下文来自运行 ', limits: '更多预算带来更大覆盖，但不保证发现新问题。' },
 };
 const adviceCopy = ADVICE_COPY[LANG] || ADVICE_COPY.en;
+const LOCALE = { nl: 'nl-NL', en: 'en-GB', de: 'de-DE', fr: 'fr-FR', es: 'es-ES', pt: 'pt-PT', it: 'it-IT', zh: 'zh-CN' }[LANG] || 'en-GB';
+const BUDGET_COPY = {
+  nl: { between: 'van', limitTitle: 'Budgetplafond bereikt', limitText: (amounts) => `De run stopte op het budgetplafond (${amounts}). Niet alle paden en combinaties zijn getest; een volgende run kan de rest afdekken.`, notice: (amounts) => `De scan stopte na ${amounts}. De bevindingen hieronder zijn bevestigd, maar de dekking is niet compleet: niet elk pad en elke combinatie is getest.` },
+  en: { between: 'of', limitTitle: 'Budget limit reached', limitText: (amounts) => `The run stopped at the budget limit (${amounts}). Not every path and combination was tested; a later run can cover the rest.`, notice: (amounts) => `The scan stopped after ${amounts}. The findings below are confirmed, but coverage is incomplete: not every path and combination was tested.` },
+  de: { between: 'von', limitTitle: 'Budgetlimit erreicht', limitText: (amounts) => `Der Lauf endete am Budgetlimit (${amounts}). Nicht jeder Pfad und jede Kombination wurde getestet; ein späterer Lauf kann den Rest abdecken.`, notice: (amounts) => `Der Scan endete nach ${amounts}. Die Befunde unten sind bestätigt, aber die Abdeckung ist unvollständig: Nicht jeder Pfad und jede Kombination wurde getestet.` },
+}[LANG] || {
+  between: 'of',
+  limitTitle: 'Budget limit reached',
+  limitText: (amounts) => `The run stopped at the budget limit (${amounts}). Not every path and combination was tested; a later run can cover the rest.`,
+  notice: (amounts) => `The scan stopped after ${amounts}. The findings below are confirmed, but coverage is incomplete: not every path and combination was tested.`,
+};
+const TIME_BETWEEN = { nl: 'tot', en: 'to', de: 'bis', fr: 'à', es: 'a', pt: 'a', it: 'a', zh: '至' }[LANG] || 'to';
+const NOSCRIPT_MAP = {
+  nl: 'De kaart heeft JavaScript nodig. Alle punten staan ook bij de bevindingen.',
+  en: 'The map requires JavaScript. All issues are also listed under findings.',
+  de: 'Die Karte benötigt JavaScript. Alle Punkte stehen auch bei den Befunden.',
+}[LANG] || 'The map requires JavaScript. All issues are also listed under findings.';
 // per-language content so generating one language never overwrites another
 const contentPath = path.join(dir, `content.${LANG}.json`);
 const legacyPath = path.join(dir, 'content.json');
@@ -151,7 +170,7 @@ const findingHtml = findings.map((f) => {
   const statusRaw = String(f.status || '').toLowerCase();
   const partial = statusRaw.startsWith('deels') || statusRaw.startsWith('part');
   const suspected = partial || statusRaw.startsWith('vermoed');
-  const statusLabel = partial ? 'Deels bevestigd' : suspected ? 'Vermoedelijk' : 'Bevestigd';
+  const statusLabel = partial ? ({ nl: 'Deels bevestigd', en: 'Partially confirmed', de: 'Teilweise bestätigt' }[LANG] || 'Partially confirmed') : suspected ? ({ nl: 'Vermoedelijk', en: 'Suspected', de: 'Vermutet' }[LANG] || 'Suspected') : ({ nl: 'Bevestigd', en: 'Confirmed', de: 'Bestätigt' }[LANG] || 'Confirmed');
   const statusIcon = suspected ? 'help' : 'check';
   const raw = f._raw || [];
   const structured = (f._evidence || []).filter((e) => e.command || e.result).slice(0, 2);
@@ -227,19 +246,19 @@ const planHtml = phase(1, 'Vandaag', 'Kritiek en hoog', p.vandaag) + phase(2, 'D
 const goodHtml = (c.good || []).map((g) => `<li><svg class="i i--sm" aria-hidden="true"><use href="#i-check"/></svg><div><b>${esc(g.title)}</b><span>${esc(g.text)}</span>${g.proof ? `<code>${esc(textOf(g.proof))}</code>` : ''}</div></li>`).join('\n              ');
 const budgetExhausted = scan.status === 'BUDGET_EXHAUSTED'
   || (Number(scan.budgetUsd) > 0 && Number(scan.spentUsd || 0) / Number(scan.budgetUsd) >= 0.97);
-const budgetAmounts = `$${Number(scan.spentUsd || 0).toFixed(2)} van $${Number(scan.budgetUsd || 0).toFixed(2)}`;
+const budgetAmounts = `$${Number(scan.spentUsd || 0).toFixed(2)} ${BUDGET_COPY.between} $${Number(scan.budgetUsd || 0).toFixed(2)}`;
 const budgetLimitHtml = budgetExhausted
-  ? `<li><svg class="i i--sm" aria-hidden="true"><use href="#i-help"/></svg><div><b>Budgetplafond bereikt</b><span>De run stopte op het budgetplafond (${esc(budgetAmounts)}). Niet alle paden en combinaties zijn getest; een volgende run kan de rest afdekken.</span></div></li>`
+  ? `<li><svg class="i i--sm" aria-hidden="true"><use href="#i-help"/></svg><div><b>${esc(BUDGET_COPY.limitTitle)}</b><span>${esc(BUDGET_COPY.limitText(budgetAmounts))}</span></div></li>`
   : '';
 const limitsHtml = (c.limits || []).map((l) => `<li><svg class="i i--sm" aria-hidden="true"><use href="#i-help"/></svg><div><b>${esc(l.title)}</b><span>${esc(l.text)}</span></div></li>`).join('\n              ') + budgetLimitHtml;
 const budgetNotice = budgetExhausted
-  ? `<div style="border:1px solid #F59E0B;background:#FFFBEB;padding:16px 20px;margin:0 0 24px;border-radius:2px;font-size:14px;line-height:1.65;color:#78350F"><b>Let op: het budgetplafond is bereikt.</b> De scan stopte na ${esc(budgetAmounts)}. De bevindingen hieronder zijn bevestigd, maar de dekking is niet compleet: niet elk pad en elke combinatie is getest.</div>`
+  ? `<div style="border:1px solid #F59E0B;background:#FFFBEB;padding:16px 20px;margin:0 0 24px;border-radius:2px;font-size:14px;line-height:1.65;color:#78350F"><b>${esc(BUDGET_COPY.limitTitle)}.</b> ${esc(BUDGET_COPY.notice(budgetAmounts))}</div>`
   : '';
 const glossHtml = glossary.map((g) => `<div id="woord-${g.id}"><dt>${esc(g.term)}</dt><dd>${esc(g.def)}</dd></div>`).join('\n              ');
 
-const started = scan.startedAt ? new Date(scan.startedAt).toLocaleString('nl-NL', { dateStyle: 'long', timeStyle: 'short' }) : '';
-const ended = scan.endedAt ? new Date(scan.endedAt).toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit' }) : '';
-const startTime = scan.startedAt ? new Date(scan.startedAt).toLocaleTimeString('nl-NL', { hour: '2-digit', minute: '2-digit' }) : '';
+const started = scan.startedAt ? new Date(scan.startedAt).toLocaleString(LOCALE, { dateStyle: 'long', timeStyle: 'short' }) : '';
+const ended = scan.endedAt ? new Date(scan.endedAt).toLocaleTimeString(LOCALE, { hour: '2-digit', minute: '2-digit' }) : '';
+const startTime = scan.startedAt ? new Date(scan.startedAt).toLocaleTimeString(LOCALE, { hour: '2-digit', minute: '2-digit' }) : '';
 const host = scan.host || 'website';
 
 // ---------- proven attack chain (only when threat_demo.mjs has run) ----------
@@ -395,8 +414,7 @@ function isImportantNote(text) {
 function agentVisual(agent) {
   return agentVisuals[agent] || agentVisuals.agent;
 }
-const dossierEntries = dossierFile
-  .filter((entry) => entry && entry.text)
+let dossierEntries = dossierFile  .filter((entry) => entry && entry.text)
   .map((entry) => ({
     from: entry.from || entry.agent || 'agent',
     text: String(entry.text || '')
@@ -420,12 +438,50 @@ if (attack) {
 } else {
   narrativeLines.push('De zwerm begon breed en bleef zoeken naar de zwakste plek.');
 }
-const dossierIntro = attack
-  ? 'Het begon bij een login. Daarna bleef de zwerm trekken, van het ene antwoord naar het volgende.'
-  : 'De zwerm begon breed en ging steeds dieper op wat hij vond.';
-const dossierLede = dossierEntries.length
-  ? 'Korte notities uit de missie, in gewone taal. Elke agent heeft een eigen kleur. Wat een waarschuwing verdient, staat rood onderstreept met een WAARSCHUWING-label.'
-  : 'Deze run had nog geen aparte gedachtennotities. Dit is de korte samenvatting uit de missielog, in gewone taal.';
+
+// Agent notes are free text from the scan, not part of the translated report JSON.
+// Translate them before rendering; if that fails, hide the section instead of
+// showing Dutch text inside an English or German report.
+if (LANG !== 'nl' && (dossierEntries.length || narrativeLines.length)) {
+  const readKey = () => {
+    if (process.env.DEEPSEEK_API_KEY) return process.env.DEEPSEEK_API_KEY.trim();
+    try {
+      const yaml = fs.readFileSync(path.join(os.homedir(), '.dsh', '.credentials.yaml'), 'utf8');
+      return (yaml.match(/DEEPSEEK_API_KEY:\s*([^\s"']+)/) || [])[1] || '';
+    } catch { return ''; }
+  };
+  const key = readKey();
+  try {
+    if (!key) throw new Error('no DeepSeek key');
+    const translated = await translateJson({
+      lines: dossierEntries.map((entry) => entry.text),
+      narrative: narrativeLines,
+    }, { language: LANG, model: process.env.DEEPSEEK_REPORT_MODEL || 'deepseek-flash', apiKey: key });
+    if (Array.isArray(translated.value?.lines) && translated.value.lines.length === dossierEntries.length) {
+      dossierEntries = dossierEntries.map((entry, index) => ({ ...entry, text: String(translated.value.lines[index] || entry.text) }));
+    } else {
+      dossierEntries = [];
+    }
+    if (Array.isArray(translated.value?.narrative)) {
+      narrativeLines.splice(0, narrativeLines.length, ...translated.value.narrative.map(String));
+    } else {
+      narrativeLines.splice(0, narrativeLines.length);
+    }
+  } catch (error) {
+    console.error(`dossier translation failed, hiding agent quotes: ${error instanceof Error ? error.message : String(error)}`);
+    dossierEntries = [];
+    narrativeLines.splice(0, narrativeLines.length);
+  }
+}
+
+const DOSSIER_COPY = {
+  nl: { intro: attack ? 'Het begon bij een login. Daarna bleef de zwerm trekken, van het ene antwoord naar het volgende.' : 'De zwerm begon breed en ging steeds dieper op wat hij vond.', lede: dossierEntries.length ? 'Korte notities uit de missie, in gewone taal. Elke agent heeft een eigen kleur. Wat een waarschuwing verdient, staat rood onderstreept met een WAARSCHUWING-label.' : 'Deze run had nog geen aparte gedachtennotities. Dit is de korte samenvatting uit de missielog, in gewone taal.', summary: 'Samengevat uit de missielog. Nieuwe runs laten de agenten zelf korte gedachten schrijven.' },
+  en: { intro: attack ? 'It started with a login. The swarm kept pulling, from one answer to the next.' : 'The swarm started broad and went deeper into what it found.', lede: dossierEntries.length ? 'Short notes from the mission, in plain language. Each agent has its own colour. Anything that deserves a warning is underlined in red with a WARNING label.' : 'This run had no separate agent notes. This is the short summary from the mission log, in plain language.', summary: 'Summarised from the mission log. New runs let the agents write their own short notes.' },
+  de: { intro: attack ? 'Es begann mit einem Login. Danach blieb der Schwarm dran, von einer Antwort zur nächsten.' : 'Der Schwarm begann breit und ging bei seinen Funden immer tiefer.', lede: dossierEntries.length ? 'Kurze Notizen aus der Mission in einfacher Sprache. Jeder Agent hat eine eigene Farbe. Was eine Warnung verdient, ist rot unterstrichen und mit einem WARNUNG-Label markiert.' : 'Dieser Lauf hatte keine separaten Agentennotizen. Dies ist die kurze Zusammenfassung aus dem Missionsprotokoll in einfacher Sprache.', summary: 'Zusammengefasst aus dem Missionsprotokoll. Neue Läufe lassen die Agenten eigene kurze Notizen schreiben.' },
+};
+const dossierCopy = DOSSIER_COPY[LANG] || DOSSIER_COPY.en;
+const dossierIntro = dossierCopy.intro;
+const dossierLede = dossierCopy.lede;
 const dossierLegend = dossierEntries.length
   ? `<div style="display:flex;flex-wrap:wrap;gap:8px 16px;align-items:center;margin:0 0 18px;padding:12px 14px;border:1px solid var(--line);background:var(--surface);border-radius:2px;font-size:11px;letter-spacing:.02em">
       ${Object.entries(agentVisuals).filter(([key]) => key !== 'agent').map(([key, visual]) => `<span style="display:inline-flex;align-items:center;gap:6px;color:${visual.color}"><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${visual.border}"></span>${esc(agentNames[key] || key)}</span>`).join('')}
@@ -448,7 +504,7 @@ const dossierBody = dossierEntries.length
       <footer style="color:var(--muted);font-size:12px">${esc(agentNames[entry.from] || entry.from)} · ${esc(entry.source)}</footer>
     </blockquote>`;
   }).join('')}</div>`
-  : `<div style="display:grid;gap:10px">${narrativeLines.map((line) => `<p style="margin:0;line-height:1.7">${esc(line)}</p>`).join('')}</div><p style="margin:16px 0 0;color:var(--muted);font-size:12px">Samengevat uit de missielog. Nieuwe runs laten de agenten zelf korte gedachten schrijven.</p>`;
+  : `<div style="display:grid;gap:10px">${narrativeLines.map((line) => `<p style="margin:0;line-height:1.7">${esc(line)}</p>`).join('')}</div><p style="margin:16px 0 0;color:var(--muted);font-size:12px">${esc(dossierCopy.summary)}</p>`;
 const dossierSection = (dossierEntries.length || narrativeLines.length) ? `
   <section class="section" id="dossier" aria-labelledby="dossier-titel">
     <div class="wrap">
@@ -585,7 +641,7 @@ ${sprite}
     </div>
     <ul class="hero__meta" data-enter style="--i:4">
       <li><svg class="i i--xs" aria-hidden="true"><use href="#i-globe"/></svg>${esc(host)}</li>
-      <li><svg class="i i--xs" aria-hidden="true"><use href="#i-clock"/></svg>${esc(startTime)} tot ${esc(ended)}</li>
+      <li><svg class="i i--xs" aria-hidden="true"><use href="#i-clock"/></svg>${esc(startTime)} ${esc(TIME_BETWEEN)} ${esc(ended)}</li>
       <li><svg class="i i--xs" aria-hidden="true"><use href="#i-scan"/></svg>Actief, van buitenaf</li>
     </ul>
   </div>
@@ -666,7 +722,7 @@ ${dossierSection}
               <li><span class="legend__marker legend__marker--suspected"></span>Vermoedelijk</li>
             </ul>
           </figcaption>
-          <noscript><p class="lede">De kaart heeft JavaScript nodig. Alle punten staan ook bij de bevindingen.</p></noscript>
+          <noscript><p class="lede">${esc(NOSCRIPT_MAP)}</p></noscript>
         </figure>
 
         <aside class="inspector" data-preview aria-live="polite" aria-label="Uitleg bij het gekozen punt">
@@ -724,9 +780,9 @@ ${planHtml}
           <button type="button" data-filter="middel" aria-pressed="false">Middel <span class="count">${counts.middel}</span></button>
           <button type="button" data-filter="klein" aria-pressed="false">Laag <span class="count">${klein}</span></button>
         </div>
-        <span class="toolbar__status" data-filter-status aria-live="polite">${findings.length} van ${findings.length} punten</span>
+        <span class="toolbar__status" data-filter-status aria-live="polite">${LANG === 'nl' ? `${findings.length} van ${findings.length} punten` : LANG === 'de' ? `${findings.length} von ${findings.length} Punkten` : `${findings.length} of ${findings.length} issues`}</span>
         <button class="btn btn--ghost btn--sm" type="button" data-expand-all aria-pressed="false" data-label-open="Alles inklappen" data-label-closed="Alles openklappen">
-          <svg class="i i--xs" aria-hidden="true"><use href="#i-unfold"/></svg><span data-label>Alles openklappen</span>
+          <svg class="i i--xs" aria-hidden="true"><use href="#i-unfold"/></svg><span data-label>${LANG === 'nl' ? 'Alles openklappen' : 'Expand all'}</span>
         </button>
       </div>
 
@@ -801,9 +857,9 @@ ${evidenceSection}
             <dl class="facts">
               <dt>Gemaakt met</dt><dd>hackmywebsite.ai${c.generatedBy === 'model' ? ` en ${esc(c.model || 'een AI-model')}` : ''}</dd>
               <dt>Scan</dt><dd><code>${esc(scan.id)}</code></dd>
-              <dt>Datum</dt><dd>${esc(started)}${ended ? ' tot ' + esc(ended) : ''}</dd>
+              <dt>Datum</dt><dd>${esc(started)}${ended ? ` ${esc(TIME_BETWEEN)} ${esc(ended)}` : ''}</dd>
               <dt>Doel</dt><dd>${esc(scan.url || '')}</dd>
-              <dt>Kosten van de scan</dt><dd>$${Number(scan.spentUsd || 0).toFixed(2)} van $${Number(scan.budgetUsd || 0).toFixed(2)}</dd>
+              <dt>Kosten van de scan</dt><dd>$${Number(scan.spentUsd || 0).toFixed(2)} ${esc(BUDGET_COPY.between)} $${Number(scan.budgetUsd || 0).toFixed(2)}</dd>
             </dl>
           </div>
         </details>
